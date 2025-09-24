@@ -13,7 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photos to help you clean them up.",
+        "PHPhotoLibraryPreventAutomaticLimitedAccessAlert": "false"
+      },
+      "bundleIdentifier": "com.francescocipolla.GallerySweeper"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +26,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.francescocipolla.GallerySweeper"
     },
     "web": {
       "favicon": "./assets/favicon.png"

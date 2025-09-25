@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
+import { GlassToast } from '../ui/glass/GlassToast';
 
 interface ModalContextType {
     showModal: (content: React.ReactNode) => void;
     hideModal: () => void;
+    showToast: (message: string, variant?: 'success' | 'error') => void;
 }
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
@@ -11,6 +13,8 @@ const ModalContext = createContext<ModalContextType | undefined>(undefined);
 export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [modalVisible, setModalVisible] = useState(false);
     const [modalContent, setModalContent] = useState<React.ReactNode>(null);
+    const [toastConfig, setToastConfig] = useState<{ message: string; variant: 'success' | 'error', key: number } | null>(null);
+
 
     const showModal = (content: React.ReactNode) => {
         setModalContent(content);
@@ -22,8 +26,16 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setModalContent(null);
     };
 
+    const showToast = useCallback((message: string, variant: 'success' | 'error' = 'success') => {
+        setToastConfig({ message, variant, key: Date.now() });
+    }, []);
+
+    const hideToast = () => {
+        setToastConfig(null);
+    };
+
     return (
-        <ModalContext.Provider value={{ showModal, hideModal }}>
+        <ModalContext.Provider value={{ showModal, hideModal, showToast }}>
             {children}
             <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={hideModal}>
                 <View style={styles.background} />
@@ -31,6 +43,15 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     {modalContent}
                 </View>
             </Modal>
+            {toastConfig && (
+                <GlassToast
+                    key={toastConfig.key}
+                    message={toastConfig.message}
+                    visible={!!toastConfig}
+                    onDismiss={hideToast}
+                    variant={toastConfig.variant}
+                />
+            )}
         </ModalContext.Provider>
     );
 };

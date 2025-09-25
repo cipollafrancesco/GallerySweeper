@@ -1,39 +1,70 @@
+import { BlurView } from 'expo-blur';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from 'react-native';
-import { GlassCard } from './GlassCard';
+import { StyleSheet, TouchableOpacity, TouchableOpacityProps, View } from 'react-native';
+import { Body } from '../primitives/Typography';
+import { theme } from '../theme';
 
 interface GlassButtonProps extends TouchableOpacityProps {
     title: string;
-    primary?: boolean;
+    variant?: 'keep' | 'delete' | 'undo' | 'primary';
+    children?: React.ReactNode;
 }
 
-export const GlassButton: React.FC<GlassButtonProps> = ({ title, primary, ...props }) => {
+export const GlassButton: React.FC<GlassButtonProps> = ({
+    title,
+    variant = 'primary',
+    style,
+    children,
+    ...props
+}) => {
+    const variantStyle = styles[variant];
+    const content = children ? (
+        <View style={styles.contentContainer}>{children}</View>
+    ) : (
+        <Body style={styles.text}>{title}</Body>
+    );
+
     return (
-        <TouchableOpacity {...props} style={styles.touchable}>
-            <GlassCard style={[styles.button, primary && styles.primaryButton]}>
-                <Text style={[styles.text, primary && styles.primaryText]}>{title}</Text>
-            </GlassCard>
+        <TouchableOpacity {...props} style={[styles.container, variantStyle, style]}>
+            {variant !== 'primary' && <BlurView intensity={80} tint="dark" style={styles.blurView} />}
+            {content}
         </TouchableOpacity>
     );
 };
 
 const styles = StyleSheet.create({
-    touchable: {
-        flex: 1,
-    },
-    button: {
-        padding: 15,
+    container: {
+        height: 50,
+        minWidth: 50,
+        borderRadius: theme.radii.m,
+        overflow: 'hidden',
+        justifyContent: 'center',
         alignItems: 'center',
+        paddingHorizontal: theme.spacing.m,
     },
-    primaryButton: {
-        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    contentContainer: {
+        backgroundColor: 'transparent',
+    },
+    blurView: {
+        ...StyleSheet.absoluteFillObject,
     },
     text: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
+        ...theme.typography.button,
+        backgroundColor: 'transparent',
     },
-    primaryText: {
-        color: 'white',
+    primary: {
+        backgroundColor: theme.colors.glassBg,
+        borderColor: theme.colors.glassBorder,
+        borderWidth: 1,
+        ...theme.shadows.subtle,
+    },
+    keep: {
+        backgroundColor: 'transparent',
+    },
+    delete: {
+        backgroundColor: 'transparent',
+    },
+    undo: {
+        backgroundColor: 'transparent',
     },
 });

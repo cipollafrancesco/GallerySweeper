@@ -1,57 +1,77 @@
+import { BlurView } from 'expo-blur';
+import { Check, Trash2, Undo2 } from 'lucide-react-native';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueue } from '../../domain/queueManager';
-import * as SettingsLink from '../../platform/settingsLink';
+import { useModal } from '../../providers/ModalProvider';
 import { GlassButton } from '../../ui/glass/GlassButton';
-import { GlassCard } from '../../ui/glass/GlassCard';
-import { GlassToast } from '../../ui/glass/GlassToast';
-import { Center, Spacer } from '../../ui/primitives/Layout';
-import { Body, Subtitle } from '../../ui/primitives/Typography';
+import { Spacer } from '../../ui/primitives/Layout';
+import { Body, Title } from '../../ui/primitives/Typography';
+import { theme } from '../../ui/theme';
+import { SwipeDeckRef } from '../deck/SwipeDeck';
+import { SettingsButton } from '../settings/SettingsButton';
+import { SettingsModal } from '../settings/SettingsModal';
 
-export const Hud: React.FC = () => {
-    const { kept, deleted, markedForDelete, lastAction, access, undo, commitDeletions, clearMarkedForDelete } = useQueue();
+export const Hud: React.FC<{ deckRef: React.RefObject<SwipeDeckRef> }> = ({ deckRef }) => {
+    const {
+        markedForDelete,
+        lastAction,
+        undo,
+        commitDeletions,
+        clearMarkedForDelete,
+    } = useQueue();
+    const insets = useSafeAreaInsets();
+    const { showModal } = useModal();
 
     const hasPendingDeletions = markedForDelete.size > 0;
 
+    const onKeep = () => deckRef.current?.swipeRight();
+    const onDelete = () => deckRef.current?.swipeLeft();
+
+    const onOpenSettings = () => {
+        showModal(<SettingsModal />);
+    };
+
+
     return (
         <View style={styles.container} pointerEvents="box-none">
-            <View style={styles.top}>
-                <GlassCard>
-                    <Subtitle>Kept: {kept}</Subtitle>
-                    <Spacer size={10} />
-                    <Subtitle>To Delete: {markedForDelete.size}</Subtitle>
-                    <Spacer size={10} />
-                    <Subtitle>Deleted: {deleted}</Subtitle>
-                </GlassCard>
-
-                {access === 'limited' && (
-                    <TouchableOpacity onPress={SettingsLink.openPhotosSettings}>
-                        <GlassCard style={styles.banner}>
-                            <Body>Limited Access: Tap to Fix</Body>
-                        </GlassCard>
-                    </TouchableOpacity>
-                )}
+            {/* Top Bar */}
+            <View style={[styles.top, { paddingTop: insets.top || theme.spacing.m }]}>
+                <View style={styles.topBar}>
+                    <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+                    {hasPendingDeletions ? (
+                        <View style={styles.commitContent}>
+                            <Body>{markedForDelete.size} items to delete</Body>
+                            <View style={styles.commitActions}>
+                                <GlassButton title="Clear" onPress={clearMarkedForDelete} variant="undo" />
+                                <Spacer size={theme.spacing.s} horizontal />
+                                <GlassButton title="Commit" onPress={commitDeletions} variant="delete" />
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={styles.headerContent}>
+                            <Title style={styles.title}>Gallery Cleanup</Title>
+                        </View>
+                    )}
+                </View>
+                <SettingsButton onPress={onOpenSettings} />
             </View>
 
-            <View style={styles.bottom} pointerEvents="box-none">
-                {hasPendingDeletions && (
-                    <GlassCard style={styles.commitBar}>
-                        <Center>
-                            <Body>{markedForDelete.size} items ready to delete</Body>
-                        </Center>
-                        <Spacer size={15} />
-                        <View style={styles.commitActions}>
-                            <GlassButton title="Clear" onPress={clearMarkedForDelete} />
-                            <Spacer size={15} horizontal />
-                            <GlassButton title="Commit Deletes" onPress={commitDeletions} primary />
-                        </View>
-                    </GlassCard>
-                )}
-                {lastAction && (
-                    <View style={styles.toast} pointerEvents="auto">
-                        <GlassToast message="Action recorded. Tap to undo." onPress={undo} />
-                    </View>
-                )}
+            {/* Action Bar */}
+            <View style={[styles.bottom, { paddingBottom: insets.bottom || theme.spacing.m }]}>
+                <View style={styles.actionBar}>
+                    <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+                    <GlassButton title="Keep" onPress={onKeep} variant="keep">
+                        <Check color={theme.colors.keep} size={28} />
+                    </GlassButton>
+                    <GlassButton title="Undo" onPress={undo} disabled={!lastAction} variant="undo">
+                        <Undo2 color={theme.colors.undo} size={28} />
+                    </GlassButton>
+                    <GlassButton title="Delete" onPress={onDelete} variant="delete">
+                        <Trash2 color={theme.colors.delete} size={28} />
+                    </GlassButton>
+                </View>
             </View>
         </View>
     );
@@ -60,36 +80,62 @@ export const Hud: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
-        padding: 20,
         justifyContent: 'space-between',
-        alignItems: 'center',
     },
+    // Top Bar
     top: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        paddingHorizontal: theme.spacing.m,
+    },
+    topBar: {
+        borderRadius: theme.radii.m,
+        overflow: 'hidden',
+        borderColor: theme.colors.glassBorder,
+        borderWidth: 1,
+        marginTop: theme.spacing.s,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerContent: {
+        padding: theme.spacing.m,
+        alignItems: 'center',
+        flex: 1,
+    },
+    title: {
+        ...theme.typography.h2,
+        color: theme.colors.secondary,
+    },
+
+    // Bottom Action Bar
+    bottom: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingHorizontal: theme.spacing.m,
+    },
+    actionBar: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.m,
+        backgroundColor: 'transparent',
+        borderRadius: theme.radii.l,
+        borderWidth: 1,
+        borderColor: theme.colors.glassBorder,
+        overflow: 'hidden',
+    },
+    commitContent: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        width: '100%',
-        marginTop: 40,
-    },
-    bottom: {
-        width: '100%',
         alignItems: 'center',
-    },
-    banner: {
-        paddingHorizontal: 15,
-        paddingVertical: 10,
-    },
-    commitBar: {
-        width: '100%',
-        padding: 15,
-        alignItems: 'center',
+        padding: theme.spacing.m,
     },
     commitActions: {
         flexDirection: 'row',
-        width: '100%',
-    },
-    toast: {
-        marginTop: 20,
-        alignSelf: 'center',
     },
 });

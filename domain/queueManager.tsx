@@ -22,6 +22,7 @@ interface State {
 
 type Action =
     | { type: 'INIT'; payload: { access: MediaAccess.AccessLevel; canAskAgain: boolean; markedForDelete: Set<string> } }
+    | { type: 'RESET_REVIEW_STATE' }
     | { type: 'LOAD_MORE'; payload: MediaAccess.AssetListResponse }
     | { type: 'KEEP' }
     | { type: 'MARK_FOR_DELETE' }
@@ -53,6 +54,12 @@ const reducer = (state: State, action: Action): State => {
                 access: action.payload.access,
                 canAskAgain: action.payload.canAskAgain,
                 markedForDelete: action.payload.markedForDelete,
+            };
+        case 'RESET_REVIEW_STATE':
+            return {
+                ...initialState,
+                access: state.access,
+                canAskAgain: state.canAskAgain,
             };
         case 'PERMISSION_PROMPT_START':
             return { ...state, isRequestingPermission: true };
@@ -249,5 +256,11 @@ export const useQueue = () => {
         }
     };
 
-    return { ...state, loadInitial, ensureBuffer, keepTop, markTopForDeletion, undo, resolvePermissionRequest, commitDeletions, clearMarkedForDelete };
+    const resetReviewState = async () => {
+        await storage.clearReviewState();
+        dispatch({ type: 'RESET_REVIEW_STATE' });
+        loadInitial();
+    };
+
+    return { ...state, loadInitial, ensureBuffer, keepTop, markTopForDeletion, undo, resolvePermissionRequest, commitDeletions, clearMarkedForDelete, resetReviewState };
 };

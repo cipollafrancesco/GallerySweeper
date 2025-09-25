@@ -1,29 +1,27 @@
 import { BlurView } from 'expo-blur';
 import React from 'react';
 import { StyleSheet, View, ViewProps } from 'react-native';
+import { theme } from '../theme';
 
 export const GlassCard: React.FC<ViewProps> = ({ style, children, ...props }) => {
     return (
-        <View style={[styles.cardContainer, style]} pointerEvents="auto">
-            <BlurView intensity={50} tint="light" style={StyleSheet.absoluteFill} />
-            <View {...props} style={styles.card}>
-                {children}
-            </View>
+        <View style={[styles.cardOuter, style]} {...props}>
+            <BlurView intensity={80} tint="dark" style={styles.blurView} />
+            {children}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    cardContainer: {
-        width: '90%',
-        borderRadius: 20,
+    cardOuter: {
+        borderRadius: theme.radii.l,
         overflow: 'hidden',
-        backgroundColor: 'transparent',
-        borderColor: 'rgba(255, 255, 255, 0.2)',
+        borderColor: theme.colors.glassBorder,
         borderWidth: 1,
+        backgroundColor: theme.colors.glassBg,
+        ...theme.shadows.subtle,
     },
-    card: {
-        padding: 20,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    blurView: {
+        ...StyleSheet.absoluteFillObject,
     },
 });

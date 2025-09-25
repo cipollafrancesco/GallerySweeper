@@ -1,17 +1,20 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { createRef, useEffect } from 'react';
+import { StatusBar, StyleSheet } from 'react-native';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueueProvider, useQueue } from './domain/queueManager';
 import { EmptyDeck } from './features/deck/EmptyDeck';
-import { SwipeDeck } from './features/deck/SwipeDeck';
+import { SwipeDeck, SwipeDeckRef } from './features/deck/SwipeDeck';
 import { Hud } from './features/hud/Hud';
-import { OverlayManager } from './features/onboarding/OverlayManager';
 import { Prefetcher } from './features/prefetch/Prefetcher';
 import { ModalProvider } from './providers/ModalProvider';
+import { theme } from './ui/theme';
 
 const AppContent: React.FC = () => {
   const { queue, access, loadInitial, ensureBuffer, keepTop, markTopForDeletion, hasNextPage, loading } = useQueue();
+  const deckRef = createRef<SwipeDeckRef>();
 
   useEffect(() => {
     loadInitial();
@@ -27,24 +30,32 @@ const AppContent: React.FC = () => {
   const showEmptyDeck = !topAsset && !hasNextPage && !loading;
 
   return (
-    <View style={styles.container}>
-      {showDeck && topAsset && <SwipeDeck asset={topAsset} onLeft={markTopForDeletion} onRight={keepTop} />}
+    <LinearGradient
+      colors={[theme.colors.backgroundStart, theme.colors.backgroundEnd]}
+      style={styles.container}
+    >
+      <StatusBar barStyle="light-content" />
+      {showDeck && topAsset && (
+        <SwipeDeck ref={deckRef} asset={topAsset} onLeft={markTopForDeletion} onRight={keepTop} />
+      )}
       {showEmptyDeck && <EmptyDeck onRefresh={loadInitial} />}
-      {showDeck && <Hud />}
+      {showDeck && <Hud deckRef={deckRef} />}
       {showDeck && <Prefetcher uris={prefetchUris} />}
-      <OverlayManager />
-    </View>
+      {/* <OverlayManager /> */}
+    </LinearGradient>
   );
 };
 
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ModalProvider>
-        <QueueProvider>
-          <AppContent />
-        </QueueProvider>
-      </ModalProvider>
+      <SafeAreaProvider>
+        <ModalProvider>
+          <QueueProvider>
+            <AppContent />
+          </QueueProvider>
+        </ModalProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
@@ -52,6 +63,5 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
 });

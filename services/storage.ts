@@ -77,4 +77,26 @@ export const storage = {
             console.error('Failed to set last seen asset ID', e);
         }
     },
+
+    async clearLastSeenAssetId() {
+        try {
+            await AsyncStorage.removeItem(LAST_SEEN_ASSET_ID_KEY);
+        } catch (e) {
+            console.error('Failed to clear last seen asset ID', e);
+        }
+    },
+
+    async clearReviewState() {
+        reviewedIdsCache.clear();
+        markedForDeleteIdsCache.clear();
+        try {
+            await AsyncStorage.multiRemove([
+                REVIEWED_IDS_KEY,
+                MARKED_FOR_DELETE_IDS_KEY,
+                LAST_SEEN_ASSET_ID_KEY,
+            ]);
+        } catch (e) {
+            console.error('Failed to clear review state from storage', e);
+        }
+    },
 };

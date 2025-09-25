@@ -1,9 +1,10 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { GlassButton } from '../../ui/glass/GlassButton';
 import { GlassCard } from '../../ui/glass/GlassCard';
 import { Center, Spacer } from '../../ui/primitives/Layout';
 import { Body, Title } from '../../ui/primitives/Typography';
+import { theme } from '../../ui/theme';
 
 interface EmptyDeckProps {
     onRefresh: () => void;
@@ -12,11 +13,11 @@ interface EmptyDeckProps {
 export const EmptyDeck: React.FC<EmptyDeckProps> = ({ onRefresh }) => {
     return (
         <Center style={styles.container}>
-            <GlassCard>
-                <Title>All clear!</Title>
-                <Spacer size={20} />
-                <Body>You've reviewed all the photos in your library.</Body>
-                <Spacer size={30} />
+            <GlassCard style={styles.card}>
+                <Title style={styles.title}>No more photos</Title>
+                <Spacer size={theme.spacing.m} />
+                <Body style={styles.body}>You've reviewed all available photos.</Body>
+                <Spacer size={theme.spacing.l} />
                 <GlassButton title="Refresh" onPress={onRefresh} />
             </GlassCard>
         </Center>
@@ -26,6 +27,17 @@ export const EmptyDeck: React.FC<EmptyDeckProps> = ({ onRefresh }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 20,
+        padding: theme.spacing.m,
+    },
+    card: {
+        padding: theme.spacing.xl,
+        alignItems: 'center',
+    },
+    title: {
+        textAlign: 'center',
+    },
+    body: {
+        textAlign: 'center',
+        maxWidth: '80%',
     },
 });

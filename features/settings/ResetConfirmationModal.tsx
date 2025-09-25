@@ -24,13 +24,12 @@ export const ResetConfirmationModal: React.FC<Props> = ({ onConfirm }) => {
             </Body>
             <Spacer size={theme.spacing.l} />
             <View style={styles.actions}>
-                <GlassButton title="Cancel" onPress={hideModal} variant="undo" style={styles.button} />
+                <GlassButton title="Cancel" onPress={hideModal} variant="undo" />
                 <Spacer size={theme.spacing.m} horizontal />
                 <GlassButton
                     title="Reset"
                     onPress={onConfirm}
                     variant="delete"
-                    style={styles.button}
                     accessibilityLabel="Confirm reset"
                 />
             </View>
@@ -40,14 +39,12 @@ export const ResetConfirmationModal: React.FC<Props> = ({ onConfirm }) => {
 
 const styles = StyleSheet.create({
     card: {
-        width: '100%',
         maxWidth: 400,
+        padding: theme.spacing.l,
     },
     actions: {
         flexDirection: 'row',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    button: {
-        flex: 1,
-    }
 });

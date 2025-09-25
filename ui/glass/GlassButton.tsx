@@ -1,70 +1,123 @@
 import { BlurView } from 'expo-blur';
 import React from 'react';
-import { StyleSheet, TouchableOpacity, TouchableOpacityProps, View } from 'react-native';
-import { Body } from '../primitives/Typography';
+import { Pressable, PressableProps, StyleSheet, View } from 'react-native';
+import { Body, Caption } from '../primitives/Typography';
 import { theme } from '../theme';
 
-interface GlassButtonProps extends TouchableOpacityProps {
+interface GlassButtonProps extends PressableProps {
     title: string;
-    variant?: 'keep' | 'delete' | 'undo' | 'primary';
+    variant?: 'keep' | 'delete' | 'undo';
+    size?: 'medium' | 'small';
     children?: React.ReactNode;
+    style?: any;
 }
 
 export const GlassButton: React.FC<GlassButtonProps> = ({
     title,
-    variant = 'primary',
-    style,
+    variant = 'undo',
+    size = 'medium',
     children,
+    style,
     ...props
 }) => {
-    const variantStyle = styles[variant];
-    const content = children ? (
-        <View style={styles.contentContainer}>{children}</View>
-    ) : (
-        <Body style={styles.text}>{title}</Body>
-    );
+    const variantStyles = {
+        keep: styles.keep,
+        delete: styles.delete,
+        undo: styles.undo,
+    };
+
+    const textVariantStyles = {
+        keep: styles.keepText,
+        delete: styles.deleteText,
+        undo: styles.undoText,
+    };
+
+    const isTextOnly = !children;
+    const TextComponent = isTextOnly ? (size === 'small' ? Caption : Body) : Caption;
 
     return (
-        <TouchableOpacity {...props} style={[styles.container, variantStyle, style]}>
-            {variant !== 'primary' && <BlurView intensity={80} tint="dark" style={styles.blurView} />}
-            {content}
-        </TouchableOpacity>
+        <Pressable
+            style={({ pressed }) => [
+                styles.container,
+                isTextOnly
+                    ? size === 'small'
+                        ? styles.smallTextContainer
+                        : styles.textContainer
+                    : styles.iconContainer,
+                style,
+                pressed && styles.pressed,
+            ]}
+            {...props}
+        >
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[styles.inner, variantStyles[variant]]}>
+                {children}
+                <TextComponent
+                    style={[styles.title, isTextOnly ? styles.textTitle : styles.iconTitle, textVariantStyles[variant]]}
+                >
+                    {title}
+                </TextComponent>
+            </View>
+        </Pressable>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        height: 50,
-        minWidth: 50,
         borderRadius: theme.radii.m,
         overflow: 'hidden',
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: theme.spacing.m,
     },
-    contentContainer: {
-        backgroundColor: 'transparent',
+    iconContainer: {
+        minWidth: 72,
+        minHeight: 72,
+        padding: theme.spacing.s,
     },
-    blurView: {
-        ...StyleSheet.absoluteFillObject,
+    textContainer: {
+        paddingVertical: theme.spacing.m - 4,
+        paddingHorizontal: theme.spacing.l,
     },
-    text: {
-        ...theme.typography.button,
-        backgroundColor: 'transparent',
+    smallTextContainer: {
+        paddingVertical: theme.spacing.m - 4,
+        paddingHorizontal: theme.spacing.m + 4,
     },
-    primary: {
-        backgroundColor: theme.colors.glassBg,
-        borderColor: theme.colors.glassBorder,
+    pressed: {
+        transform: [{ scale: 0.98 }],
+        opacity: 0.9,
+    },
+    inner: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: theme.radii.m,
         borderWidth: 1,
-        ...theme.shadows.subtle,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    title: {
+        color: theme.colors.primary,
+    },
+    iconTitle: {
+        marginTop: theme.spacing.xs,
+    },
+    textTitle: {
+        fontWeight: '600',
     },
     keep: {
-        backgroundColor: 'transparent',
+        backgroundColor: theme.colors.keepFaded,
+        borderColor: theme.colors.keep,
     },
     delete: {
-        backgroundColor: 'transparent',
+        backgroundColor: theme.colors.deleteFaded,
+        borderColor: theme.colors.delete,
     },
     undo: {
-        backgroundColor: 'transparent',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(255, 255, 255, 0.2)',
     },
+    keepText: { color: theme.colors.keep },
+    deleteText: { color: theme.colors.delete },
+    undoText: { color: theme.colors.secondary },
 });

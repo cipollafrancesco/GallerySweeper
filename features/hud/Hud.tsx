@@ -13,6 +13,77 @@ import { SwipeDeckRef } from '../deck/SwipeDeck';
 import { SettingsButton } from '../settings/SettingsButton';
 import { SettingsModal } from '../settings/SettingsModal';
 
+type TopBarProps = {
+    hasPendingDeletions: boolean;
+    pendingDeletionsCount: number;
+    onClearDeletions: () => void;
+    onCommitDeletions: () => void;
+    onOpenSettings: () => void;
+};
+
+const TopBar: React.FC<TopBarProps> = ({
+    hasPendingDeletions,
+    pendingDeletionsCount,
+    onClearDeletions,
+    onCommitDeletions,
+    onOpenSettings,
+}) => {
+    const insets = useSafeAreaInsets();
+    return (
+        <View style={[styles.top, { paddingTop: insets.top ? insets.top + theme.spacing.s : theme.spacing.m }]}>
+            <View style={styles.topBar}>
+                <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+                {hasPendingDeletions ? (
+                    <View style={styles.commitContent}>
+                        <Body>{pendingDeletionsCount} items to delete</Body>
+                        <View style={styles.commitActions}>
+                            <GlassButton title="Clear" onPress={onClearDeletions} variant="undo" size="small" />
+                            <Spacer size={theme.spacing.s} horizontal />
+                            <GlassButton title="Commit" onPress={onCommitDeletions} variant="delete" size="small" />
+                        </View>
+                    </View>
+                ) : (
+                    <View style={styles.headerContent}>
+                        <View style={styles.headerSide} />
+                        <Title style={styles.title}>Gallery Cleanup</Title>
+                        <View style={styles.headerSide}>
+                            <SettingsButton onPress={onOpenSettings} />
+                        </View>
+                    </View>
+                )}
+            </View>
+        </View>
+    );
+};
+
+type ActionBarProps = {
+    onKeep: () => void;
+    onDelete: () => void;
+    onUndo: () => void;
+    isUndoDisabled: boolean;
+};
+
+const ActionBar: React.FC<ActionBarProps> = ({ onKeep, onDelete, onUndo, isUndoDisabled }) => {
+    const insets = useSafeAreaInsets();
+    return (
+        <View style={[styles.bottom, { paddingBottom: insets.bottom ? insets.bottom + theme.spacing.s : theme.spacing.m }]}>
+            <View style={styles.actionBar}>
+                <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+                <GlassButton title="Keep" onPress={onKeep} variant="keep">
+                    <Check color={theme.colors.keep} size={28} />
+                </GlassButton>
+                <GlassButton title="Undo" onPress={onUndo} disabled={isUndoDisabled} variant="undo">
+                    <Undo2 color={theme.colors.undo} size={28} />
+                </GlassButton>
+                <GlassButton title="Delete" onPress={onDelete} variant="delete">
+                    <Trash2 color={theme.colors.delete} size={28} />
+                </GlassButton>
+            </View>
+        </View>
+    );
+};
+
+
 export const Hud: React.FC<{ deckRef: React.RefObject<SwipeDeckRef> }> = ({ deckRef }) => {
     const {
         markedForDelete,
@@ -21,7 +92,6 @@ export const Hud: React.FC<{ deckRef: React.RefObject<SwipeDeckRef> }> = ({ deck
         commitDeletions,
         clearMarkedForDelete,
     } = useQueue();
-    const insets = useSafeAreaInsets();
     const { showModal } = useModal();
 
     const hasPendingDeletions = markedForDelete.size > 0;
@@ -36,43 +106,19 @@ export const Hud: React.FC<{ deckRef: React.RefObject<SwipeDeckRef> }> = ({ deck
 
     return (
         <View style={styles.container} pointerEvents="box-none">
-            {/* Top Bar */}
-            <View style={[styles.top, { paddingTop: insets.top || theme.spacing.m }]}>
-                <View style={styles.topBar}>
-                    <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
-                    {hasPendingDeletions ? (
-                        <View style={styles.commitContent}>
-                            <Body>{markedForDelete.size} items to delete</Body>
-                            <View style={styles.commitActions}>
-                                <GlassButton title="Clear" onPress={clearMarkedForDelete} variant="undo" />
-                                <Spacer size={theme.spacing.s} horizontal />
-                                <GlassButton title="Commit" onPress={commitDeletions} variant="delete" />
-                            </View>
-                        </View>
-                    ) : (
-                        <View style={styles.headerContent}>
-                            <Title style={styles.title}>Gallery Cleanup</Title>
-                        </View>
-                    )}
-                </View>
-                <SettingsButton onPress={onOpenSettings} />
-            </View>
-
-            {/* Action Bar */}
-            <View style={[styles.bottom, { paddingBottom: insets.bottom || theme.spacing.m }]}>
-                <View style={styles.actionBar}>
-                    <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
-                    <GlassButton title="Keep" onPress={onKeep} variant="keep">
-                        <Check color={theme.colors.keep} size={28} />
-                    </GlassButton>
-                    <GlassButton title="Undo" onPress={undo} disabled={!lastAction} variant="undo">
-                        <Undo2 color={theme.colors.undo} size={28} />
-                    </GlassButton>
-                    <GlassButton title="Delete" onPress={onDelete} variant="delete">
-                        <Trash2 color={theme.colors.delete} size={28} />
-                    </GlassButton>
-                </View>
-            </View>
+            <TopBar
+                hasPendingDeletions={hasPendingDeletions}
+                pendingDeletionsCount={markedForDelete.size}
+                onClearDeletions={clearMarkedForDelete}
+                onCommitDeletions={commitDeletions}
+                onOpenSettings={onOpenSettings}
+            />
+            <ActionBar
+                onKeep={onKeep}
+                onDelete={onDelete}
+                onUndo={undo}
+                isUndoDisabled={!lastAction}
+            />
         </View>
     );
 };
@@ -91,19 +137,23 @@ const styles = StyleSheet.create({
         paddingHorizontal: theme.spacing.m,
     },
     topBar: {
-        borderRadius: theme.radii.m,
+        borderRadius: theme.radii.l,
         overflow: 'hidden',
         borderColor: theme.colors.glassBorder,
         borderWidth: 1,
-        marginTop: theme.spacing.s,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     headerContent: {
-        padding: theme.spacing.m,
+        paddingVertical: theme.spacing.m,
+        paddingHorizontal: theme.spacing.s,
         alignItems: 'center',
-        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%',
+    },
+    headerSide: {
+        width: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     title: {
         ...theme.typography.h2,
@@ -122,7 +172,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-around',
         alignItems: 'center',
-        paddingVertical: theme.spacing.m,
+        paddingVertical: theme.spacing.s,
         backgroundColor: 'transparent',
         borderRadius: theme.radii.l,
         borderWidth: 1,

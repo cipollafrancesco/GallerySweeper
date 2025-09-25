@@ -21,18 +21,13 @@ export const SettingsButton: React.FC<Props> = ({ onPress }) => {
 
 const styles = StyleSheet.create({
     container: {
-        position: 'absolute',
-        top: 60,
-        right: 20,
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: 'rgba(0,0,0,0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 1,
     },
     pressed: {
-        backgroundColor: 'rgba(0,0,0,0.2)',
+        backgroundColor: 'rgba(0,0,0,0.1)',
     },
 });

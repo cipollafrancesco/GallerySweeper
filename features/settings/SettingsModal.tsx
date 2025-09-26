@@ -1,4 +1,4 @@
-import Constants from 'expo-constants';
+// import Constants from 'expo-constants';
 import { X } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -11,18 +11,20 @@ import { theme } from '../../ui/theme';
 import { ResetConfirmationModal } from './ResetConfirmationModal';
 
 export const SettingsModal = () => {
-    const { hideModal, showModal, showToast } = useModal();
-    const { resetReviewState } = useQueue();
-    const appVersion = Constants.expoConfig?.version;
+    const { hideModal, hideAllModals, showModal, showToast } = useModal();
+    const { resetReviewState, loading } = useQueue();
+    const appVersion = '1.0.0'; // Constants.expoConfig?.version;
 
     const onReset = () => {
-        showModal(<ResetConfirmationModal onConfirm={handleResetConfirm} />);
+        // Optimistic strategy: only show confirmation modal when not loading
+        if (!loading) {
+            showModal(<ResetConfirmationModal onConfirm={handleResetConfirm} />, { type: 'dialog' });
+        }
     };
 
     const handleResetConfirm = async () => {
-        hideModal(); // Hide confirmation modal first
         await resetReviewState();
-        hideModal(); // Then hide settings modal
+        hideAllModals(); // Close all modals (confirmation + settings)
         showToast('Review state reset. All photos will be shown.');
     };
 
@@ -79,8 +81,8 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.deleteFaded,
     },
     resetText: {
+        ...theme.typography.headline,
         color: theme.colors.delete,
-        ...theme.typography.h3,
         fontWeight: '600',
     },
     resetSubtitle: {

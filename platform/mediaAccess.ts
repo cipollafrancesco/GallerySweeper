@@ -11,11 +11,10 @@ export interface PermissionResponse {
 }
 
 export const getPermission = async (): Promise<PermissionResponse> => {
-    const { status, canAskAgain } = await MediaLibrary.getPermissionsAsync(true);
+    const { status, canAskAgain, accessPrivileges } = await MediaLibrary.getPermissionsAsync();
 
     let access: AccessLevel = 'undetermined';
     if (status === 'granted') {
-        const { accessPrivileges } = await MediaLibrary.getPermissionsAsync(false);
         access = accessPrivileges === 'limited' ? 'limited' : 'all';
     } else if (status === 'denied') {
         access = 'none';
@@ -29,11 +28,10 @@ export const getPermission = async (): Promise<PermissionResponse> => {
 };
 
 export const requestPermission = async (): Promise<PermissionResponse> => {
-    const { status, canAskAgain } = await MediaLibrary.requestPermissionsAsync(true);
+    const { status, canAskAgain, accessPrivileges } = await MediaLibrary.requestPermissionsAsync();
 
     let access: AccessLevel = 'undetermined';
     if (status === 'granted') {
-        const { accessPrivileges } = await MediaLibrary.getPermissionsAsync(false);
         access = accessPrivileges === 'limited' ? 'limited' : 'all';
     } else if (status === 'denied') {
         access = 'none';

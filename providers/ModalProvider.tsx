@@ -2,29 +2,45 @@ import React, { createContext, useCallback, useContext, useState } from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
 import { GlassToast } from '../ui/glass/GlassToast';
 
+interface ModalRecord {
+    id: string;
+    content: React.ReactNode;
+    type: 'dialog' | 'custom';
+}
+
 interface ModalContextType {
-    showModal: (content: React.ReactNode) => void;
+    showModal: (content: React.ReactNode, options?: { type: 'dialog' | 'custom' }) => void;
     hideModal: () => void;
+    hideAllModals: () => void;
     showToast: (message: string, variant?: 'success' | 'error') => void;
+    isModalOpen: boolean;
 }
 
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
 export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [modalVisible, setModalVisible] = useState(false);
-    const [modalContent, setModalContent] = useState<React.ReactNode>(null);
+    const [modalStack, setModalStack] = useState<ModalRecord[]>([]);
     const [toastConfig, setToastConfig] = useState<{ message: string; variant: 'success' | 'error', key: number } | null>(null);
 
+    // Get the topmost modal to display
+    const topModal = modalStack[modalStack.length - 1];
 
-    const showModal = (content: React.ReactNode) => {
-        setModalContent(content);
-        setModalVisible(true);
-    };
+    const showModal = useCallback((content: React.ReactNode, options?: { type: 'dialog' | 'custom' }) => {
+        const newModal: ModalRecord = {
+            id: `modal-${Date.now()}-${Math.random()}`, // Simple unique ID
+            content,
+            type: options?.type || 'custom',
+        };
+        setModalStack(prev => [...prev, newModal]); // Add to stack
+    }, []);
 
-    const hideModal = () => {
-        setModalVisible(false);
-        setModalContent(null);
-    };
+    const hideModal = useCallback(() => {
+        setModalStack(prev => prev.slice(0, -1)); // Remove top modal from stack
+    }, []);
+
+    const hideAllModals = useCallback(() => {
+        setModalStack([]); // Clear entire stack
+    }, []);
 
     const showToast = useCallback((message: string, variant: 'success' | 'error' = 'success') => {
         setToastConfig({ message, variant, key: Date.now() });
@@ -35,13 +51,26 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     return (
-        <ModalContext.Provider value={{ showModal, hideModal, showToast }}>
+        <ModalContext.Provider value={{ showModal, hideModal, hideAllModals, showToast, isModalOpen: modalStack.length > 0 }}>
             {children}
-            <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={hideModal}>
+            <Modal
+                visible={!!topModal}
+                transparent
+                animationType="fade"
+                onRequestClose={hideModal}
+            >
                 <View style={styles.background} />
-                <View style={styles.container} pointerEvents="box-none">
-                    {modalContent}
-                </View>
+                {topModal && (
+                    topModal.type === 'dialog' ? (
+                        <View style={styles.dialogContainer} pointerEvents="box-none">
+                            {topModal.content}
+                        </View>
+                    ) : (
+                        <View style={styles.customContainer} pointerEvents="box-none">
+                            {topModal.content}
+                        </View>
+                    )
+                )}
             </Modal>
             {toastConfig && (
                 <GlassToast
@@ -69,10 +98,13 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0,0,0,0.8)',
     },
-    container: {
-        flex: 1,
+    dialogContainer: {
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
+    },
+    customContainer: {
+        ...StyleSheet.absoluteFillObject,
     },
 });

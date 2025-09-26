@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useModal } from '../../providers/ModalProvider';
-import { GlassButton } from '../../ui/glass/GlassButton';
 import { GlassCard } from '../../ui/glass/GlassCard';
+import { DialogButton } from '../../ui/primitives/DialogButton';
 import { Spacer } from '../../ui/primitives/Layout';
 import { Body, Title } from '../../ui/primitives/Typography';
 import { theme } from '../../ui/theme';
@@ -16,21 +16,22 @@ export const ResetConfirmationModal: React.FC<Props> = ({ onConfirm }) => {
 
     return (
         <GlassCard style={styles.card}>
-            <Title>Reset reviewed photos?</Title>
-            <Spacer size={theme.spacing.m} />
-            <Body>
-                This clears local references (Kept, To Delete, and progress). Your photos are not deleted. Next time you
-                review, all photos will be shown.
-            </Body>
-            <Spacer size={theme.spacing.l} />
+            <View style={styles.content}>
+                <Title>Reset reviewed photos?</Title>
+                <Spacer size={theme.spacing.m} />
+                <Body>
+                    This clears local references (Kept, To Delete, and progress). Your photos are not deleted. Next time you
+                    review, all photos will be shown.
+                </Body>
+            </View>
             <View style={styles.actions}>
-                <GlassButton title="Cancel" onPress={hideModal} variant="undo" />
-                <Spacer size={theme.spacing.m} horizontal />
-                <GlassButton
+                <DialogButton title="Cancel" onPress={hideModal} isFirst />
+                <DialogButton
                     title="Reset"
                     onPress={onConfirm}
-                    variant="delete"
+                    variant="destructive"
                     accessibilityLabel="Confirm reset"
+                    isLast
                 />
             </View>
         </GlassCard>
@@ -39,12 +40,19 @@ export const ResetConfirmationModal: React.FC<Props> = ({ onConfirm }) => {
 
 const styles = StyleSheet.create({
     card: {
-        maxWidth: 400,
-        padding: theme.spacing.l,
+        maxWidth: 320,
+        padding: 0,
+        paddingTop: theme.spacing.l,
+    },
+    content: {
+        paddingHorizontal: theme.spacing.l,
+        paddingBottom: theme.spacing.l,
     },
     actions: {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: theme.colors.separator,
     },
 });

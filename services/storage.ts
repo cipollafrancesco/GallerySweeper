@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const REVIEWED_IDS_KEY = 'reviewed_ids';
 const MARKED_FOR_DELETE_IDS_KEY = 'marked_for_delete_ids';
 const LAST_SEEN_ASSET_ID_KEY = 'last_seen_asset_id';
+const ONBOARDING_SHOWN_KEY = 'onboarding_modal_shown';
 
 // Simple in-memory cache to avoid reading from AsyncStorage repeatedly
 let reviewedIdsCache: Set<string> = new Set();
@@ -97,6 +98,24 @@ export const storage = {
             ]);
         } catch (e) {
             console.error('Failed to clear review state from storage', e);
+        }
+    },
+
+    async hasOnboardingBeenShown(): Promise<boolean> {
+        try {
+            const value = await AsyncStorage.getItem(ONBOARDING_SHOWN_KEY);
+            return !!value;
+        } catch (e) {
+            console.error('Failed to check onboarding status', e);
+            return false;
+        }
+    },
+
+    async setOnboardingShown() {
+        try {
+            await AsyncStorage.setItem(ONBOARDING_SHOWN_KEY, 'true');
+        } catch (e) {
+            console.error('Failed to set onboarding shown', e);
         }
     },
 };

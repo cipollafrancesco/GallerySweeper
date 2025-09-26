@@ -8,16 +8,17 @@ import { QueueProvider, useQueue } from './domain/queueManager';
 import { EmptyDeck } from './features/deck/EmptyDeck';
 import { SwipeDeck, SwipeDeckRef } from './features/deck/SwipeDeck';
 import { Hud } from './features/hud/Hud';
+import { OverlayManager } from './features/onboarding/OverlayManager';
 import { Prefetcher } from './features/prefetch/Prefetcher';
 import { ModalProvider } from './providers/ModalProvider';
 import { theme } from './ui/theme';
 
 const AppContent: React.FC = () => {
-  const { queue, access, loadInitial, ensureBuffer, keepTop, markTopForDeletion, hasNextPage, loading } = useQueue();
-  const deckRef = createRef<SwipeDeckRef>();
+  const { queue, access, reload, ensureBuffer, keepTop, markTopForDeletion, hasNextPage, loading } = useQueue();
+  const deckRef = createRef<SwipeDeckRef | null>();
 
   useEffect(() => {
-    loadInitial();
+    reload(false); // Continue from last position on app startup
   }, []);
 
   useEffect(() => {
@@ -29,19 +30,21 @@ const AppContent: React.FC = () => {
   const prefetchUris = queue.slice(1, 5).map((asset) => asset.uri);
   const showEmptyDeck = !topAsset && !hasNextPage && !loading;
 
+  // console.log('>>> ', { queue: queue.map((asset) => asset.filename), access, hasNextPage, loading })
+
   return (
     <LinearGradient
       colors={[theme.colors.backgroundStart, theme.colors.backgroundEnd]}
       style={styles.container}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor={theme.colors.systemBackground} />
       {showDeck && topAsset && (
         <SwipeDeck ref={deckRef} asset={topAsset} onLeft={markTopForDeletion} onRight={keepTop} />
       )}
-      {showEmptyDeck && <EmptyDeck onRefresh={loadInitial} />}
+      {showEmptyDeck && <EmptyDeck onRefresh={() => reload(true)} />}
       {showDeck && <Hud deckRef={deckRef} />}
       {showDeck && <Prefetcher uris={prefetchUris} />}
-      {/* <OverlayManager /> */}
+      <OverlayManager />
     </LinearGradient>
   );
 };

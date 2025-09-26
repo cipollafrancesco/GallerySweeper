@@ -1,5 +1,6 @@
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
+import { Check, Trash2 } from 'lucide-react-native';
 import React, { useImperativeHandle } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -20,10 +21,15 @@ import { theme } from '../../ui/theme';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const swipeThreshold = screenWidth * 0.3;
 
-const CardAffordance: React.FC<{ text: string; color: string }> = ({ text, color }) => (
-    <View style={styles.affordanceContainer}>
-        <BlurView intensity={80} tint="dark" style={styles.affordanceBg} />
-        <Label style={[styles.affordanceLabel, { color }]}>{text}</Label>
+// Enhanced iOS-style chip overlay component with improved visibility
+const ChipOverlay: React.FC<{ text: string; color: string; icon: React.ReactNode }> = ({ text, color, icon }) => (
+    <View style={[styles.chipContainer, { backgroundColor: color }]}>
+        <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={styles.chipBorder} />
+        <View style={styles.chipContent}>
+            {icon}
+            <Label style={styles.chipLabel}>{text}</Label>
+        </View>
     </View>
 );
 
@@ -41,17 +47,18 @@ export interface SwipeDeckRef {
 export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset, onLeft, onRight }, ref) => {
     const translateX = useSharedValue(0);
     const hapticTriggered = useSharedValue(false);
+    const isGestureActive = useSharedValue(false);
 
     useImperativeHandle(ref, () => ({
         swipeLeft: () => {
-            translateX.value = withTiming(-screenWidth, { duration: 250 }, () => {
+            translateX.value = withTiming(-screenWidth, { duration: 300 }, () => {
                 'worklet';
                 runOnJS(onLeft)();
                 translateX.value = 0;
             });
         },
         swipeRight: () => {
-            translateX.value = withTiming(screenWidth, { duration: 250 }, () => {
+            translateX.value = withTiming(screenWidth, { duration: 300 }, () => {
                 'worklet';
                 runOnJS(onRight)();
                 translateX.value = 0;
@@ -60,6 +67,9 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
     }));
 
     const panGesture = Gesture.Pan()
+        .onBegin(() => {
+            isGestureActive.value = true;
+        })
         .onUpdate((event) => {
             translateX.value = event.translationX;
             if (Math.abs(event.translationX) > swipeThreshold && !hapticTriggered.value) {
@@ -68,12 +78,18 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
             }
         })
         .onEnd((event) => {
+            isGestureActive.value = false;
             if (event.translationX < -swipeThreshold) {
                 runOnJS(onLeft)();
             } else if (event.translationX > swipeThreshold) {
                 runOnJS(onRight)();
             }
-            translateX.value = withSpring(0);
+            // iOS-style spring animation - bouncy but controlled
+            translateX.value = withSpring(0, {
+                damping: 15,
+                stiffness: 150,
+                mass: 1,
+            });
             hapticTriggered.value = false;
         });
 
@@ -99,15 +115,73 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
     });
 
     const leftAffordanceStyle = useAnimatedStyle(() => {
-        const opacity = interpolate(translateX.value, [-swipeThreshold, 0], [1, 0], Extrapolate.CLAMP);
-        const scale = interpolate(translateX.value, [-swipeThreshold, 0], [1, 0.8], Extrapolate.CLAMP);
-        return { opacity, transform: [{ scale }] };
+        // Only show chips during active gesture
+        if (!isGestureActive.value) {
+            return {
+                opacity: 0,
+                transform: [{ scale: 0.7 }, { translateY: -10 }]
+            };
+        }
+
+        // Start showing at 15% of threshold for early feedback
+        const earlyThreshold = swipeThreshold * 0.15;
+        const opacity = interpolate(
+            translateX.value,
+            [-swipeThreshold, -earlyThreshold, 0],
+            [1, 0.4, 0],
+            Extrapolate.CLAMP
+        );
+        const scale = interpolate(
+            translateX.value,
+            [-swipeThreshold, -earlyThreshold, 0],
+            [1.1, 0.9, 0.7],
+            Extrapolate.CLAMP
+        );
+        const translateY = interpolate(
+            translateX.value,
+            [-swipeThreshold, 0],
+            [0, -10],
+            Extrapolate.CLAMP
+        );
+        return {
+            opacity,
+            transform: [{ scale }, { translateY }]
+        };
     });
 
     const rightAffordanceStyle = useAnimatedStyle(() => {
-        const opacity = interpolate(translateX.value, [0, swipeThreshold], [0, 1], Extrapolate.CLAMP);
-        const scale = interpolate(translateX.value, [0, swipeThreshold], [0.8, 1], Extrapolate.CLAMP);
-        return { opacity, transform: [{ scale }] };
+        // Only show chips during active gesture
+        if (!isGestureActive.value) {
+            return {
+                opacity: 0,
+                transform: [{ scale: 0.7 }, { translateY: -10 }]
+            };
+        }
+
+        // Start showing at 15% of threshold for early feedback
+        const earlyThreshold = swipeThreshold * 0.15;
+        const opacity = interpolate(
+            translateX.value,
+            [0, earlyThreshold, swipeThreshold],
+            [0, 0.4, 1],
+            Extrapolate.CLAMP
+        );
+        const scale = interpolate(
+            translateX.value,
+            [0, earlyThreshold, swipeThreshold],
+            [0.7, 0.9, 1.1],
+            Extrapolate.CLAMP
+        );
+        const translateY = interpolate(
+            translateX.value,
+            [0, swipeThreshold],
+            [-10, 0],
+            Extrapolate.CLAMP
+        );
+        return {
+            opacity,
+            transform: [{ scale }, { translateY }]
+        };
     });
 
     // Calculate image dimensions to maintain aspect ratio
@@ -130,12 +204,20 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
                 <Animated.View style={[styles.cardContainer, { width: cardWidth, height: cardHeight }, cardStyle]}>
                     <Image source={{ uri: asset.uri }} style={styles.image} contentFit="cover" />
 
-                    <Animated.View style={[styles.affordance, styles.leftAffordance, leftAffordanceStyle]}>
-                        <CardAffordance text="Delete" color={theme.colors.delete} />
+                    <Animated.View style={[styles.overlay, styles.leftOverlay, leftAffordanceStyle]}>
+                        <ChipOverlay
+                            text="Delete"
+                            color={theme.colors.deleteFaded}
+                            icon={<Trash2 color={theme.colors.delete} size={20} />}
+                        />
                     </Animated.View>
 
-                    <Animated.View style={[styles.affordance, styles.rightAffordance, rightAffordanceStyle]}>
-                        <CardAffordance text="Keep" color={theme.colors.keep} />
+                    <Animated.View style={[styles.overlay, styles.rightOverlay, rightAffordanceStyle]}>
+                        <ChipOverlay
+                            text="Keep"
+                            color={theme.colors.keepFaded}
+                            icon={<Check color={theme.colors.keep} size={20} />}
+                        />
                     </Animated.View>
                 </Animated.View>
             </GestureDetector>
@@ -150,38 +232,70 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cardContainer: {
-        borderRadius: theme.radii.l,
+        borderRadius: theme.radii.xl,
         overflow: 'hidden',
-        ...theme.shadows.subtle,
-        borderWidth: 2,
-        borderColor: theme.colors.glassBorder,
-        backgroundColor: theme.colors.glassBg,
+        ...theme.shadows.medium,
+        backgroundColor: theme.colors.secondarySystemBackground,
     },
     image: {
         ...StyleSheet.absoluteFillObject,
     },
-    affordance: {
+
+    // Overlay styles - centered positioning
+    overlay: {
         position: 'absolute',
-        top: theme.spacing.m,
-        bottom: theme.spacing.m,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         justifyContent: 'center',
+        alignItems: 'center',
     },
-    leftAffordance: {
-        left: theme.spacing.m,
+    leftOverlay: {
+        // Centered positioning maintained by parent overlay styles
     },
-    rightAffordance: {
-        right: theme.spacing.m,
+    rightOverlay: {
+        // Centered positioning maintained by parent overlay styles
     },
-    affordanceContainer: {
-        paddingVertical: theme.spacing.s,
-        paddingHorizontal: theme.spacing.m,
-        borderRadius: theme.radii.m,
+
+    // Enhanced chip styles for better visibility
+    chipContainer: {
+        borderRadius: theme.radii.pill,
         overflow: 'hidden',
+        ...theme.shadows.large,
+        minWidth: 110,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
+        // Additional shadow for better definition
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.6,
+        shadowRadius: 8,
+        elevation: 12, // Android shadow
     },
-    affordanceBg: {
-        ...StyleSheet.absoluteFillObject,
+    chipBorder: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.4)',
     },
-    affordanceLabel: {
-        ...theme.typography.label,
+    chipContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: theme.spacing.m + 2,
+        paddingHorizontal: theme.spacing.l + 4,
+        gap: theme.spacing.s,
+        backgroundColor: 'rgba(0, 0, 0, 0.2)', // Additional backdrop
+    },
+    chipLabel: {
+        ...theme.typography.headline,
+        fontWeight: '700', // Bolder text
+        color: theme.colors.white,
+        textShadowColor: 'rgba(0, 0, 0, 0.8)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     },
 });

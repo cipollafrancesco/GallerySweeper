@@ -6,8 +6,8 @@ import { theme } from '../theme';
 
 interface GlassButtonProps extends PressableProps {
     title: string;
-    variant?: 'keep' | 'delete' | 'undo';
-    size?: 'medium' | 'small';
+    variant?: 'keep' | 'delete' | 'undo' | 'primary';
+    size?: 'medium' | 'small' | 'large';
     children?: React.ReactNode;
     style?: any;
 }
@@ -24,12 +24,14 @@ export const GlassButton: React.FC<GlassButtonProps> = ({
         keep: styles.keep,
         delete: styles.delete,
         undo: styles.undo,
+        primary: styles.primary,
     };
 
     const textVariantStyles = {
         keep: styles.keepText,
         delete: styles.deleteText,
         undo: styles.undoText,
+        primary: styles.primaryText,
     };
 
     const isTextOnly = !children;
@@ -42,14 +44,16 @@ export const GlassButton: React.FC<GlassButtonProps> = ({
                 isTextOnly
                     ? size === 'small'
                         ? styles.smallTextContainer
-                        : styles.textContainer
+                        : size === 'large'
+                            ? styles.largeTextContainer
+                            : styles.textContainer
                     : styles.iconContainer,
                 style,
                 pressed && styles.pressed,
             ]}
             {...props}
         >
-            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
             <View style={[styles.inner, variantStyles[variant]]}>
                 {children}
                 <TextComponent
@@ -64,10 +68,11 @@ export const GlassButton: React.FC<GlassButtonProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        borderRadius: theme.radii.m,
+        borderRadius: theme.radii.l,
         overflow: 'hidden',
         justifyContent: 'center',
         alignItems: 'center',
+        ...theme.shadows.small,
     },
     iconContainer: {
         minWidth: 72,
@@ -82,13 +87,18 @@ const styles = StyleSheet.create({
         paddingVertical: theme.spacing.m - 4,
         paddingHorizontal: theme.spacing.m + 4,
     },
+    largeTextContainer: {
+        paddingVertical: theme.spacing.l,
+        paddingHorizontal: theme.spacing.xl,
+        minHeight: theme.spacing.xxxl + 8,
+    },
     pressed: {
         transform: [{ scale: 0.98 }],
         opacity: 0.9,
     },
     inner: {
         width: '100%',
-        height: '100%',
+        padding: theme.spacing.m,
         justifyContent: 'center',
         alignItems: 'center',
         borderRadius: theme.radii.m,
@@ -114,10 +124,15 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.delete,
     },
     undo: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderColor: 'rgba(255, 255, 255, 0.2)',
+        backgroundColor: theme.colors.secondarySystemFill,
+        borderColor: theme.colors.separator,
+    },
+    primary: {
+        backgroundColor: theme.colors.systemBlue,
+        borderColor: theme.colors.systemBlue,
     },
     keepText: { color: theme.colors.keep },
     deleteText: { color: theme.colors.delete },
-    undoText: { color: theme.colors.secondary },
+    undoText: { color: theme.colors.label },
+    primaryText: { color: theme.colors.white },
 });

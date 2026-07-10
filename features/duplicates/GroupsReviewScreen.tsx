@@ -1,4 +1,4 @@
-import { X } from 'lucide-react-native';
+import { RefreshCw } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,7 +15,7 @@ interface GroupsReviewScreenProps {
     deleteCount: number;
     onToggle: (groupId: string, assetId: string) => void;
     onDelete: () => void;
-    onClose: () => void;
+    onRescan: () => void;
 }
 
 export const GroupsReviewScreen: React.FC<GroupsReviewScreenProps> = ({
@@ -25,7 +25,7 @@ export const GroupsReviewScreen: React.FC<GroupsReviewScreenProps> = ({
     deleteCount,
     onToggle,
     onDelete,
-    onClose,
+    onRescan,
 }) => {
     const insets = useSafeAreaInsets();
 
@@ -33,8 +33,8 @@ export const GroupsReviewScreen: React.FC<GroupsReviewScreenProps> = ({
         <View style={styles.container}>
             <View style={[styles.header, { paddingTop: insets.top + theme.spacing.s }]}>
                 <Title style={styles.title}>Duplicates</Title>
-                <Pressable onPress={onClose} style={styles.closeButton} accessibilityLabel="Close">
-                    <X color={theme.colors.icon} size={24} />
+                <Pressable onPress={onRescan} style={styles.closeButton} accessibilityLabel="Rescan library">
+                    <RefreshCw color={theme.colors.icon} size={22} />
                 </Pressable>
             </View>
 
@@ -51,7 +51,7 @@ export const GroupsReviewScreen: React.FC<GroupsReviewScreenProps> = ({
                     <ScrollView
                         contentContainerStyle={[
                             styles.list,
-                            { paddingBottom: insets.bottom + 96 },
+                            { paddingBottom: 112 },
                         ]}
                     >
                         {groups.map((group) => (
@@ -65,7 +65,7 @@ export const GroupsReviewScreen: React.FC<GroupsReviewScreenProps> = ({
                         ))}
                     </ScrollView>
 
-                    <View style={[styles.footer, { paddingBottom: insets.bottom + theme.spacing.m }]}>
+                    <View style={[styles.footer, { paddingBottom: theme.spacing.m }]}>
                         <GlassButton
                             title={deleteCount > 0 ? `Delete selected (${deleteCount})` : 'Nothing selected'}
                             variant="delete"

@@ -139,10 +139,10 @@ type ActionBarProps = {
 };
 
 const ActionBar: React.FC<ActionBarProps> = ({ onKeep, onDelete, onUndo, isUndoDisabled }) => {
-    const insets = useSafeAreaInsets();
-
+    // The bottom tab bar owns the safe-area inset now, so this bar only needs
+    // its own padding to sit just above it.
     return (
-        <View style={[styles.actionBar, { paddingBottom: insets.bottom + theme.spacing.m }]}>
+        <View style={[styles.actionBar, { paddingBottom: theme.spacing.m }]}>
             <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
             <View style={styles.actionBarContent}>
                 <ActionButton

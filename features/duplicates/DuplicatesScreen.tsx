@@ -1,11 +1,14 @@
+import { Search } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as MediaAccess from '../../platform/mediaAccess';
 import { useModal } from '../../providers/ModalProvider';
 import { scanForDuplicates } from '../../services/duplicates/pipeline';
 import { isSemanticAvailable } from '../../services/duplicates/semantic';
 import { storage } from '../../services/storage';
 import type { AssetMeta, CancelToken, DuplicateGroup, ScanProgress } from '../../services/duplicates/types';
+import { GlassButton } from '../../ui/glass/GlassButton';
 import { GlassCard } from '../../ui/glass/GlassCard';
 import { DialogButton } from '../../ui/primitives/DialogButton';
 import { Spacer } from '../../ui/primitives/Layout';
@@ -14,7 +17,7 @@ import { theme } from '../../ui/theme';
 import { GroupsReviewScreen } from './GroupsReviewScreen';
 import { ScanProgressModal } from './ScanProgressModal';
 
-type Stage = 'scanning' | 'reviewing';
+type Stage = 'idle' | 'scanning' | 'reviewing';
 
 /** Builds the initial per-group selection: everything except the keeper is marked for deletion. */
 function initialSelection(groups: DuplicateGroup[]): Map<string, Set<string>> {
@@ -25,10 +28,17 @@ function initialSelection(groups: DuplicateGroup[]): Map<string, Set<string>> {
     return selection;
 }
 
-export const DuplicatesFlow: React.FC = () => {
-    const { hideModal, showToast } = useModal();
+/**
+ * The "Duplicates" tab: scans the library on first mount, shows a grid of
+ * duplicate groups, and deletes the selected photos. Mounted (not modal), so it
+ * keeps its results when the user switches tabs. Rescan re-runs on demand.
+ */
+export const DuplicatesScreen: React.FC = () => {
+    const { showToast } = useModal();
+    const insets = useSafeAreaInsets();
 
     const [stage, setStage] = useState<Stage>('scanning');
+    const [scanRun, setScanRun] = useState(0);
     const [progress, setProgress] = useState<ScanProgress | null>(null);
     const [groups, setGroups] = useState<DuplicateGroup[]>([]);
     const [metaById, setMetaById] = useState<Map<string, AssetMeta>>(new Map());
@@ -38,32 +48,44 @@ export const DuplicatesFlow: React.FC = () => {
     const cancelRef = useRef<CancelToken>({ cancelled: false });
 
     useEffect(() => {
-        // Each effect run gets a fresh token so StrictMode's double-invoke (which
-        // cancels the first run on cleanup) doesn't permanently cancel the scan.
+        // Fresh token per run so StrictMode's double-invoke (which cancels the
+        // first run on cleanup) doesn't permanently cancel the scan.
         const cancel: CancelToken = { cancelled: false };
         cancelRef.current = cancel;
         let mounted = true;
+        setStage('scanning');
+        setProgress(null);
 
         (async () => {
-            const result = await scanForDuplicates({
-                cancel,
-                enableSemantic: isSemanticAvailable(),
-                onProgress: (p) => {
-                    if (mounted && !cancel.cancelled) setProgress(p);
-                },
-            });
-            if (!mounted || cancel.cancelled) return;
-            setGroups(result.groups);
-            setMetaById(result.metaById);
-            setSelection(initialSelection(result.groups));
-            setStage('reviewing');
+            try {
+                const result = await scanForDuplicates({
+                    cancel,
+                    enableSemantic: isSemanticAvailable(),
+                    onProgress: (p) => {
+                        if (mounted && !cancel.cancelled) setProgress(p);
+                    },
+                });
+                if (!mounted || cancel.cancelled) return;
+                setGroups(result.groups);
+                setMetaById(result.metaById);
+                setSelection(initialSelection(result.groups));
+                setStage('reviewing');
+            } catch {
+                // e.g. missing media permission — show the empty review state so
+                // the user can grant access and rescan from the header.
+                if (!mounted || cancel.cancelled) return;
+                setGroups([]);
+                setMetaById(new Map());
+                setSelection(new Map());
+                setStage('reviewing');
+            }
         })();
 
         return () => {
             mounted = false;
             cancel.cancelled = true;
         };
-    }, []);
+    }, [scanRun]);
 
     const deleteCount = useMemo(() => {
         let count = 0;
@@ -71,10 +93,12 @@ export const DuplicatesFlow: React.FC = () => {
         return count;
     }, [selection]);
 
+    const startScan = useCallback(() => setScanRun((n) => n + 1), []);
+
     const handleCancelScan = useCallback(() => {
         cancelRef.current.cancelled = true;
-        hideModal();
-    }, [hideModal]);
+        setStage('idle');
+    }, []);
 
     const handleToggle = useCallback((groupId: string, assetId: string) => {
         setSelection((prev) => {
@@ -105,8 +129,7 @@ export const DuplicatesFlow: React.FC = () => {
         setSelection((prev) => {
             const next = new Map<string, Set<string>>();
             for (const [groupId, set] of prev) {
-                const survivors = new Set([...set].filter((id) => !deletedIds.has(id)));
-                next.set(groupId, survivors);
+                next.set(groupId, new Set([...set].filter((id) => !deletedIds.has(id))));
             }
             return next;
         });
@@ -137,9 +160,25 @@ export const DuplicatesFlow: React.FC = () => {
 
     return (
         <View style={styles.root}>
-            {stage === 'scanning' ? (
-                <ScanProgressModal progress={progress} onCancel={handleCancelScan} />
-            ) : (
+            {stage === 'scanning' && <ScanProgressModal progress={progress} onCancel={handleCancelScan} />}
+
+            {stage === 'idle' && (
+                <View style={[styles.idle, { paddingTop: insets.top }]}>
+                    <GlassCard style={styles.idleCard}>
+                        <Title style={styles.idleTitle}>Find duplicates</Title>
+                        <Spacer size={theme.spacing.s} />
+                        <Body style={styles.idleBody}>
+                            Scan your library on-device for duplicate and similar photos. Nothing leaves your phone.
+                        </Body>
+                        <Spacer size={theme.spacing.xl} />
+                        <GlassButton title="Scan library" variant="primary" size="large" onPress={startScan}>
+                            <Search color={theme.colors.white} size={20} />
+                        </GlassButton>
+                    </GlassCard>
+                </View>
+            )}
+
+            {stage === 'reviewing' && (
                 <GroupsReviewScreen
                     groups={groups}
                     metaById={metaById}
@@ -147,7 +186,7 @@ export const DuplicatesFlow: React.FC = () => {
                     deleteCount={deleteCount}
                     onToggle={handleToggle}
                     onDelete={() => setConfirmVisible(true)}
-                    onClose={hideModal}
+                    onRescan={startScan}
                 />
             )}
 
@@ -155,7 +194,9 @@ export const DuplicatesFlow: React.FC = () => {
                 <View style={styles.confirmOverlay}>
                     <GlassCard style={styles.confirmCard}>
                         <View style={styles.confirmContent}>
-                            <Title>Delete {deleteCount} {deleteCount === 1 ? 'photo' : 'photos'}?</Title>
+                            <Title>
+                                Delete {deleteCount} {deleteCount === 1 ? 'photo' : 'photos'}?
+                            </Title>
                             <Spacer size={theme.spacing.m} />
                             <Body>
                                 The selected photos will be removed from your library. On iOS they go to
@@ -183,6 +224,25 @@ const styles = StyleSheet.create({
     root: {
         flex: 1,
         backgroundColor: theme.colors.systemBackground,
+    },
+    idle: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: theme.spacing.xl,
+    },
+    idleCard: {
+        width: '100%',
+        maxWidth: 360,
+        padding: theme.spacing.xl,
+        alignItems: 'center',
+    },
+    idleTitle: {
+        textAlign: 'center',
+    },
+    idleBody: {
+        color: theme.colors.secondaryLabel,
+        textAlign: 'center',
     },
     confirmOverlay: {
         ...StyleSheet.absoluteFillObject,

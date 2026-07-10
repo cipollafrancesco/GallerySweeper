@@ -73,10 +73,26 @@ export const list = async ({
     };
 };
 
+export type AssetInfo = MediaLibrary.AssetInfo;
+
+/**
+ * Fetches extended asset info (localUri, EXIF, GPS, media subtypes). Comparatively
+ * expensive, so call it lazily — only when pixels/metadata are actually needed.
+ * `shouldDownloadFromNetwork: false` avoids pulling iCloud-only originals.
+ */
+export const getInfo = async (id: string): Promise<AssetInfo> => {
+    return MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: false });
+};
+
 export interface DeleteResponse {
     movedToTrash: boolean;
     requiresUserConfirm?: boolean;
 }
+
+export const deleteMany = async (ids: string[]): Promise<boolean> => {
+    if (ids.length === 0) return true;
+    return MediaLibrary.deleteAssetsAsync(ids);
+};
 
 export const deleteOne = async (id: string): Promise<DeleteResponse> => {
     if (Platform.OS === 'android') {

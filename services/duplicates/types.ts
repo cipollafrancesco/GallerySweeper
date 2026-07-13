@@ -37,13 +37,21 @@ export interface Session {
 
 export type GroupReason = 'near-dup' | 'similar';
 
-/** A detected group of duplicate / similar assets, with a pre-selected keeper. */
+/**
+ * A detected group of duplicate / similar assets. `keeperId` is only an
+ * algorithmic suggestion (best resolution/sharpness/non-screenshot) surfaced
+ * as a hint in the UI — it is never automatically applied to the user's
+ * keep/delete decisions.
+ */
 export interface DuplicateGroup {
     id: string;
     assetIds: string[];
     reason: GroupReason;
     keeperId: string;
 }
+
+/** A user's explicit choice for one photo in a group. Absent = undecided. */
+export type PhotoDecision = 'keep' | 'delete';
 
 export type ScanPhase = 'collecting' | 'hashing' | 'semantic' | 'grouping';
 
@@ -56,4 +64,24 @@ export interface ScanProgress {
 /** Minimal cooperative-cancellation token (avoids depending on a global AbortController). */
 export interface CancelToken {
     cancelled: boolean;
+}
+
+/**
+ * Counters describing what happened to every collected asset during a scan.
+ * Surfaced in logs and the empty-state UI so a failed scan (e.g. iCloud-only
+ * originals, a decode error) is never indistinguishable from a clean library.
+ */
+export interface ScanDiagnostics {
+    collected: number;
+    cacheHits: number;
+    hashed: number;
+    /** iOS: `getAssetInfoAsync` returned no `localUri` (iCloud-only original). */
+    skippedNoLocalUri: number;
+    /** iOS: `getAssetInfoAsync` itself threw. */
+    getInfoFailed: number;
+    /** `computePerceptualHash` threw for a resolved uri. */
+    decodeFailed: number;
+    /** Recovered a hash via the `ph://` fallback after `localUri` was missing. */
+    phFallbackRecovered: number;
+    durationMs: number;
 }

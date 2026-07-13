@@ -13,10 +13,13 @@ import { BottomTabBar, TabKey } from './features/navigation/BottomTabBar';
 import { OverlayManager } from './features/onboarding/OverlayManager';
 import { Prefetcher } from './features/prefetch/Prefetcher';
 import { ModalProvider } from './providers/ModalProvider';
+import { RestoreProvider, useRestore } from './providers/RestoreProvider';
+import { registerBackgroundScan } from './services/duplicates/backgroundScan';
 import { theme } from './ui/theme';
 
 const AppContent: React.FC = () => {
   const { queue, access, reload, ensureBuffer, keepTop, markTopForDeletion, hasNextPage, loading } = useQueue();
+  const { restoreNonce } = useRestore();
   const deckRef = createRef<SwipeDeckRef | null>();
 
   const [tab, setTab] = useState<TabKey>('review');
@@ -27,6 +30,20 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     reload(false); // Continue from last position on app startup
   }, []);
+
+  // Ask iOS to opportunistically run the background duplicate-scan continuation
+  // (see services/duplicates/backgroundScan.ts). Idempotent — safe on every launch;
+  // no-ops on Android/simulator/Expo Go where the module can't actually schedule.
+  useEffect(() => {
+    void registerBackgroundScan();
+  }, []);
+
+  // A restored backup rewrites the persisted review state; reload the swipe queue
+  // from storage so the deck reflects it. Runs here (inside QueueProvider) because
+  // SettingsModal — which triggers the restore — sits above QueueProvider in the tree.
+  useEffect(() => {
+    if (restoreNonce > 0) reload(false);
+  }, [restoreNonce]);
 
   useEffect(() => {
     ensureBuffer();
@@ -53,7 +70,7 @@ const AppContent: React.FC = () => {
           {showDeck && topAsset && (
             <SwipeDeck ref={deckRef} asset={topAsset} onLeft={markTopForDeletion} onRight={keepTop} />
           )}
-          {showEmptyDeck && <EmptyDeck onRefresh={() => reload(true)} />}
+          {showDeck && showEmptyDeck && <EmptyDeck onRefresh={() => reload(true)} />}
           {showDeck && <Hud deckRef={deckRef} />}
           {showDeck && <Prefetcher uris={prefetchUris} />}
         </View>
@@ -75,11 +92,13 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ModalProvider>
-          <QueueProvider>
-            <AppContent />
-          </QueueProvider>
-        </ModalProvider>
+        <RestoreProvider>
+          <ModalProvider>
+            <QueueProvider>
+              <AppContent />
+            </QueueProvider>
+          </ModalProvider>
+        </RestoreProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

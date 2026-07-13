@@ -26,6 +26,27 @@ export const storage = {
     getReviewedIds: () => reviewedIdsCache,
     getMarkedForDeleteIds: () => markedForDeleteIdsCache,
 
+    // Bulk overwrite the reviewed set — used when restoring a backup. Updates the
+    // in-memory cache too so the app is consistent even before the follow-up reload.
+    async setReviewedIds(ids: string[]) {
+        reviewedIdsCache = new Set(ids);
+        try {
+            await AsyncStorage.setItem(REVIEWED_IDS_KEY, JSON.stringify([...reviewedIdsCache]));
+        } catch (e) {
+            console.error('Failed to set reviewed IDs', e);
+        }
+    },
+
+    // Bulk overwrite the marked-for-delete set — used when restoring a backup.
+    async setMarkedForDeleteIds(ids: string[]) {
+        markedForDeleteIdsCache = new Set(ids);
+        try {
+            await AsyncStorage.setItem(MARKED_FOR_DELETE_IDS_KEY, JSON.stringify([...markedForDeleteIdsCache]));
+        } catch (e) {
+            console.error('Failed to set marked for delete IDs', e);
+        }
+    },
+
     async addReviewedId(id: string) {
         reviewedIdsCache.add(id);
         try {
@@ -116,6 +137,14 @@ export const storage = {
             await AsyncStorage.setItem(ONBOARDING_SHOWN_KEY, 'true');
         } catch (e) {
             console.error('Failed to set onboarding shown', e);
+        }
+    },
+
+    async clearOnboardingShown() {
+        try {
+            await AsyncStorage.removeItem(ONBOARDING_SHOWN_KEY);
+        } catch (e) {
+            console.error('Failed to clear onboarding shown', e);
         }
     },
 };

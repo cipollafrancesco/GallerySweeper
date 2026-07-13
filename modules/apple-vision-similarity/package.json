@@ -1,0 +1,9 @@
+{
+  "name": "apple-vision-similarity",
+  "version": "1.0.0",
+  "description": "On-device Apple Vision feature-print similarity, used by GallerySweeper's duplicate-detection pipeline.",
+  "main": "index.ts",
+  "license": "UNLICENSED",
+  "author": "GallerySweeper",
+  "private": true
+}

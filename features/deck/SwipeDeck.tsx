@@ -51,6 +51,7 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
 
     useImperativeHandle(ref, () => ({
         swipeLeft: () => {
+            Haptics.impact();
             translateX.value = withTiming(-screenWidth, { duration: 300 }, () => {
                 'worklet';
                 runOnJS(onLeft)();
@@ -58,6 +59,7 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
             });
         },
         swipeRight: () => {
+            Haptics.impact();
             translateX.value = withTiming(screenWidth, { duration: 300 }, () => {
                 'worklet';
                 runOnJS(onRight)();
@@ -201,7 +203,24 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
     return (
         <View style={styles.container} pointerEvents="box-none">
             <GestureDetector gesture={panGesture}>
-                <Animated.View style={[styles.cardContainer, { width: cardWidth, height: cardHeight }, cardStyle]}>
+                <Animated.View
+                    style={[styles.cardContainer, { width: cardWidth, height: cardHeight }, cardStyle]}
+                    accessible
+                    accessibilityRole="image"
+                    accessibilityLabel="Photo to review"
+                    accessibilityHint="Swipe right to keep, left to delete. Or use the actions to choose."
+                    accessibilityActions={[
+                        { name: 'keep', label: 'Keep' },
+                        { name: 'delete', label: 'Delete' },
+                    ]}
+                    onAccessibilityAction={(e) => {
+                        if (e.nativeEvent.actionName === 'keep') {
+                            onRight();
+                        } else if (e.nativeEvent.actionName === 'delete') {
+                            onLeft();
+                        }
+                    }}
+                >
                     <Image source={{ uri: asset.uri }} style={styles.image} contentFit="cover" />
 
                     <Animated.View style={[styles.overlay, styles.leftOverlay, leftAffordanceStyle]}>

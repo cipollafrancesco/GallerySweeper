@@ -1,7 +1,7 @@
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react-native';
-import React from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Dimensions, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../ui/theme';
 
@@ -23,14 +23,25 @@ interface OnboardingModalProps {
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onDismiss }) => {
     const insets = useSafeAreaInsets();
+    // Slide the sheet up on mount so it feels like an iOS bottom sheet rather than
+    // just fading in with the surrounding modal.
+    const translateY = useRef(new Animated.Value(screenHeight)).current;
+    useEffect(() => {
+        Animated.timing(translateY, {
+            toValue: 0,
+            duration: 320,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+        }).start();
+    }, [translateY]);
 
     return (
         <View style={styles.container}>
-            {/* Background Overlay */}
-            <View style={styles.overlay} />
+            {/* Background Overlay — tap to dismiss */}
+            <Pressable style={styles.overlay} onPress={onDismiss} accessibilityLabel="Dismiss" />
 
             {/* Modal Sheet */}
-            <View style={[styles.sheet, { paddingBottom: insets.bottom + theme.spacing.xl }]}>
+            <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + theme.spacing.xl, transform: [{ translateY }] }]}>
                 <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
 
                 {/* Handle */}
@@ -39,7 +50,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onDismiss }) =
                 {/* Content */}
                 <View style={styles.content}>
                     <View>
-                        <Text style={styles.title}>Welcome to Gallery Cleanup</Text>
+                        <Text style={styles.title}>Welcome to Gallery Sweeper</Text>
                         <Text style={styles.subtitle}>Learn how to quickly organize your photos</Text>
 
                         <View style={styles.instructionsContainer}>
@@ -62,12 +73,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ onDismiss }) =
                     </View>
 
                     <View>
-                        <Pressable style={styles.primaryButton} onPress={onDismiss}>
-                            <Text style={styles.primaryButtonText}>Start Cleaning</Text>
+                        <Pressable style={styles.primaryButton} onPress={onDismiss} accessibilityRole="button">
+                            <Text style={styles.primaryButtonText}>Start sweeping</Text>
                         </Pressable>
                     </View>
                 </View>
-            </View>
+            </Animated.View>
         </View>
     );
 };

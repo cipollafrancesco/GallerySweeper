@@ -1,6 +1,7 @@
 import * as MediaLibrary from 'expo-media-library';
 import React, { createContext, useContext, useEffect, useReducer } from 'react';
 import * as MediaAccess from '../platform/mediaAccess';
+import { clearScanResults } from '../services/duplicates/resultsCache';
 import { storage } from '../services/storage';
 
 const BUFFER_SIZE = 10;
@@ -457,6 +458,8 @@ export const useQueue = () => {
 
     const resetReviewState = async () => {
         await storage.clearReviewState();
+        // A full reset should leave no stale cached duplicate-scan results either.
+        await clearScanResults();
         reload(true);
     };
 

@@ -50,6 +50,8 @@ export interface AssetListResponse {
     assets: Asset[];
     endCursor?: string;
     hasNextPage: boolean;
+    /** Total assets matching the query, reported by the OS from the first page. */
+    totalCount?: number;
 }
 
 export const list = async ({
@@ -59,7 +61,7 @@ export const list = async ({
     after?: string;
     first?: number;
 }): Promise<AssetListResponse> => {
-    const { assets, endCursor, hasNextPage } = await MediaLibrary.getAssetsAsync({
+    const { assets, endCursor, hasNextPage, totalCount } = await MediaLibrary.getAssetsAsync({
         after,
         first,
         sortBy: MediaLibrary.SortBy.creationTime,
@@ -70,6 +72,7 @@ export const list = async ({
         assets: assets,
         endCursor,
         hasNextPage,
+        totalCount,
     };
 };
 

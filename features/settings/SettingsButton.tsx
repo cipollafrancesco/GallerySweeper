@@ -13,21 +13,24 @@ export const SettingsButton: React.FC<Props> = ({ onPress }) => {
             style={({ pressed }) => [styles.container, pressed && styles.pressed]}
             accessibilityLabel="Settings"
             accessibilityRole="button"
+            accessibilityHint="Opens app settings"
+            hitSlop={8}
         >
-            <Settings color={theme.colors.icon} size={24} />
+            <Settings color={theme.colors.white} size={24} />
         </Pressable>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: theme.spacing.xxxl,
+        height: theme.spacing.xxxl,
+        borderRadius: theme.radii.m,
+        backgroundColor: theme.colors.secondarySystemFill,
         justifyContent: 'center',
         alignItems: 'center',
     },
     pressed: {
-        backgroundColor: 'rgba(0,0,0,0.1)',
+        opacity: 0.6,
     },
 });

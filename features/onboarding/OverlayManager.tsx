@@ -26,9 +26,13 @@ export const OverlayManager: React.FC = () => {
         hideModal();
     };
 
-    // Simple strategy: only show permission onboarding for undetermined access
-    // This covers the main use case where users need to grant initial permissions
-    const shouldShowPermissionOnboarding = isValidated && access === 'undetermined' && queue.length === 0 && !loading;
+    // Show the permission overlay whenever we don't have usable photo access:
+    // 'undetermined' (needs the initial prompt), 'limited' (needs Full Access for
+    // one-tap deletion) and 'none' (denied). The Onboarding component renders the
+    // right copy + "Open Settings" path per state; without this, limited/denied
+    // users fall through to the misleading "No more photos to review" empty deck.
+    const needsPermission = access === 'undetermined' || access === 'limited' || access === 'none';
+    const shouldShowPermissionOnboarding = isValidated && needsPermission && queue.length === 0 && !loading;
     const shouldShowDeletionOnboarding = isValidated && access === 'all' && !onboardingModalShown && !loading;
 
     useEffect(() => {

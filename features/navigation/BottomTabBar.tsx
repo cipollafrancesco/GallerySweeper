@@ -3,6 +3,7 @@ import { Layers, LayoutGrid } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as haptics from '../../platform/haptics';
 import { Caption } from '../../ui/primitives/Typography';
 import { theme } from '../../ui/theme';
 
@@ -32,7 +33,12 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ active, onChange }) 
                         <Pressable
                             key={key}
                             style={styles.item}
-                            onPress={() => onChange(key)}
+                            onPress={() => {
+                                if (!isActive) {
+                                    haptics.selection();
+                                }
+                                onChange(key);
+                            }}
                             accessibilityRole="button"
                             accessibilityState={{ selected: isActive }}
                             accessibilityLabel={label}

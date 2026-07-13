@@ -65,10 +65,73 @@ export function bandKeys(h: Hash): string[] {
 /** Safety cap: skip pathological buckets (e.g. thousands of solid-colour images). */
 const MAX_BUCKET = 400;
 
+/** Mutable state threaded across incremental `addHashToClusters` calls. */
+export interface ClusterState {
+    /** Band key -> ids seen so far in that band. */
+    buckets: Map<string, string[]>;
+    byId: Map<string, AssetHash>;
+}
+
+export function createClusterState(): ClusterState {
+    return { buckets: new Map(), byId: new Map() };
+}
+
+/**
+ * Online equivalent of `clusterByHash`'s inner loop: feed one hash at a time
+ * (e.g. as they're computed during a streaming scan) and it unions it against
+ * every previously-seen hash that shares a band and is within `threshold` bits.
+ * Because Union-Find components are order-independent, feeding hashes one by
+ * one via this function produces the exact same partition as `clusterByHash`
+ * feeding them all at once — the only intentional difference is `MAX_BUCKET`,
+ * which here caps candidate draws per-insert rather than skipping a bucket by
+ * its eventual final size (identical for any band that never grows past the
+ * cap, and bounded for pathological ones).
+ *
+ * Returns true iff this hash merged two previously-separate components — i.e.
+ * the visible group set actually changed, which callers can use to decide
+ * whether a UI refresh is worth doing.
+ */
+export function addHashToClusters(
+    ah: AssetHash,
+    threshold: number,
+    uf: UnionFind,
+    state: ClusterState,
+    hashLinked: Set<string>,
+): boolean {
+    state.byId.set(ah.id, ah);
+    uf.find(ah.id); // ensure every asset is a node even if it stays a singleton
+
+    const candidates = new Set<string>();
+    for (const key of bandKeys(ah.dhash)) {
+        let arr = state.buckets.get(key);
+        if (!arr) {
+            arr = [];
+            state.buckets.set(key, arr);
+        }
+        if (arr.length < MAX_BUCKET) {
+            for (const other of arr) candidates.add(other);
+        }
+        arr.push(ah.id);
+    }
+
+    let merged = false;
+    for (const other of candidates) {
+        if (hammingDistance(ah.dhash, state.byId.get(other)!.dhash) <= threshold) {
+            if (uf.find(ah.id) !== uf.find(other)) merged = true;
+            uf.union(ah.id, other);
+            hashLinked.add(ah.id);
+            hashLinked.add(other);
+        }
+    }
+    return merged;
+}
+
 /**
  * Unions near-duplicate assets whose hashes are within `threshold` bits, using
  * band bucketing to keep comparisons near-linear. Records which ids were linked
  * by a hash edge so the group reason can distinguish near-dups from similars.
+ * Defined in terms of `addHashToClusters` so batch and streaming stay equivalent
+ * by construction.
  */
 export function clusterByHash(
     hashes: AssetHash[],
@@ -76,38 +139,9 @@ export function clusterByHash(
     uf: UnionFind,
     hashLinked: Set<string>,
 ): void {
-    const byId = new Map(hashes.map((h) => [h.id, h] as const));
-    const buckets = new Map<string, string[]>();
-
+    const state = createClusterState();
     for (const ah of hashes) {
-        uf.find(ah.id); // ensure every asset is a node even if it stays a singleton
-        for (const key of bandKeys(ah.dhash)) {
-            const arr = buckets.get(key);
-            if (arr) {
-                arr.push(ah.id);
-            } else {
-                buckets.set(key, [ah.id]);
-            }
-        }
-    }
-
-    const checked = new Set<string>();
-    for (const bucket of buckets.values()) {
-        if (bucket.length < 2 || bucket.length > MAX_BUCKET) continue;
-        for (let i = 0; i < bucket.length; i++) {
-            for (let j = i + 1; j < bucket.length; j++) {
-                const a = bucket[i];
-                const b = bucket[j];
-                const pairKey = a < b ? `${a}|${b}` : `${b}|${a}`;
-                if (checked.has(pairKey)) continue;
-                checked.add(pairKey);
-                if (hammingDistance(byId.get(a)!.dhash, byId.get(b)!.dhash) <= threshold) {
-                    uf.union(a, b);
-                    hashLinked.add(a);
-                    hashLinked.add(b);
-                }
-            }
-        }
+        addHashToClusters(ah, threshold, uf, state, hashLinked);
     }
 }
 
@@ -166,11 +200,15 @@ export function assembleGroups(
     hashLinked: Set<string>,
 ): DuplicateGroup[] {
     const groups: DuplicateGroup[] = [];
-    for (const [root, ids] of uf.components()) {
+    for (const [, ids] of uf.components()) {
         if (ids.length < 2) continue;
         const reason: GroupReason = ids.some((id) => hashLinked.has(id)) ? 'near-dup' : 'similar';
+        // Use the smallest asset id (not the UF root) as the stable group id: the
+        // root can flip whenever two components merge, which would otherwise
+        // re-key this group on every streaming update and thrash the list UI.
+        const id = ids.reduce((min, x) => (x < min ? x : min));
         groups.push({
-            id: root,
+            id,
             assetIds: ids,
             reason,
             keeperId: pickKeeper(ids, meta, hashes),

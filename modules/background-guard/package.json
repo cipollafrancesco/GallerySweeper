@@ -1,0 +1,9 @@
+{
+  "name": "background-guard",
+  "version": "1.0.0",
+  "description": "Thin wrapper around UIApplication's finite-length background task API, used to checkpoint the duplicate-scan pipeline when GallerySweeper is backgrounded mid-scan.",
+  "main": "index.ts",
+  "license": "UNLICENSED",
+  "author": "GallerySweeper",
+  "private": true
+}

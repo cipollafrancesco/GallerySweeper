@@ -12,7 +12,7 @@
  */
 import { Platform } from 'react-native';
 import * as MediaAccess from '../../platform/mediaAccess';
-import { UnionFind } from './grouping';
+import { completeLinkageClusters, UnionFind } from './grouping';
 import { cosineSimilarity } from './hashCore';
 import type { AssetMeta, CancelToken, Session } from './types';
 
@@ -61,6 +61,12 @@ export const SEMANTIC_SIMILARITY_THRESHOLD = 0.9;
  * cosine similarity exceeds the threshold. Bounded O(n^2) per session (sessions
  * are small). No-op when the native module is unavailable.
  *
+ * Uses `completeLinkageClusters`, not "union every pair over threshold" — the
+ * same single-linkage chaining risk as the hash tier applies here
+ * independently (A~B~C~D via cosine similarity even when A and D are
+ * unrelated subjects), so each session's prints are first partitioned into
+ * cohesive cliques before any pair is unioned.
+ *
  * `resolveFileUri` turns an asset into a pixel-readable file URI (iOS `localUri`).
  */
 export async function addSemanticEdges(
@@ -72,6 +78,10 @@ export async function addSemanticEdges(
         threshold?: number;
         onProgress?: (processed: number, total: number) => void;
         cancel?: CancelToken;
+        /** Collects an [id, id] pair for every edge actually unioned, so callers
+         *  (`assembleGroups`) can re-apply the same cohesive edges post-hoc when
+         *  re-partitioning hash-tier components. */
+        edges?: [string, string][];
     },
 ): Promise<void> {
     if (!isSemanticAvailable()) return;
@@ -97,10 +107,16 @@ export async function addSemanticEdges(
             options?.onProgress?.(processed, total);
         }
 
-        for (let i = 0; i < prints.length; i++) {
-            for (let j = i + 1; j < prints.length; j++) {
-                if (cosineSimilarity(prints[i].vec, prints[j].vec) >= threshold) {
-                    uf.union(prints[i].id, prints[j].id);
+        const clusters = completeLinkageClusters(
+            prints,
+            (p) => p.id,
+            (a, b) => cosineSimilarity(a.vec, b.vec) >= threshold,
+        );
+        for (const cluster of clusters) {
+            for (let i = 0; i < cluster.length; i++) {
+                for (let j = i + 1; j < cluster.length; j++) {
+                    uf.union(cluster[i].id, cluster[j].id);
+                    options?.edges?.push([cluster[i].id, cluster[j].id]);
                 }
             }
         }

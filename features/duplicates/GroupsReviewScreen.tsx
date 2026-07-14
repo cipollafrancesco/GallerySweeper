@@ -1,4 +1,4 @@
-import { RefreshCw, X } from 'lucide-react-native';
+import { Eraser, RefreshCw, X } from 'lucide-react-native';
 import React from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +25,8 @@ interface GroupsReviewScreenProps {
     onDelete: () => void;
     onRescan: () => void;
     onCancelScan?: () => void;
+    /** Flushes the on-device duplicate caches and forces a full re-scan from scratch. */
+    onResetDiscovery: () => void;
 }
 
 /** Explains why a scan hashed nothing, so an empty result isn't mistaken for a clean library. */
@@ -47,6 +49,7 @@ export const GroupsReviewScreen: React.FC<GroupsReviewScreenProps> = ({
     onDelete,
     onRescan,
     onCancelScan,
+    onResetDiscovery,
 }) => {
     const insets = useSafeAreaInsets();
 
@@ -68,6 +71,14 @@ export const GroupsReviewScreen: React.FC<GroupsReviewScreenProps> = ({
                         ) : (
                             <RefreshCw color={theme.colors.icon} size={22} />
                         )}
+                    </Pressable>
+                    <Pressable
+                        onPress={onResetDiscovery}
+                        style={styles.closeButton}
+                        accessibilityLabel="Restart duplicate discovery"
+                        accessibilityHint="Clears the on-device scan cache and rescans your library from scratch"
+                    >
+                        <Eraser color={theme.colors.icon} size={22} />
                     </Pressable>
                 </View>
             </View>

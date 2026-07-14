@@ -1,7 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useModal } from '../../providers/ModalProvider';
-import type { BackupSummary } from '../../services/backup';
 import { GlassCard } from '../../ui/glass/GlassCard';
 import { DialogButton } from '../../ui/primitives/DialogButton';
 import { Spacer } from '../../ui/primitives/Layout';
@@ -9,31 +8,31 @@ import { Body, Subtitle } from '../../ui/primitives/Typography';
 import { theme } from '../../ui/theme';
 
 type Props = {
-    summary: BackupSummary;
     onConfirm: () => void;
 };
 
-export const BackupConfirmationModal: React.FC<Props> = ({ summary, onConfirm }) => {
+export const ResetDiscoveryConfirmationModal: React.FC<Props> = ({ onConfirm }) => {
     const { hideModal } = useModal();
-    const dupPart = summary.hasDuplicates ? ', plus your reviewed duplicates,' : '';
 
     return (
         <GlassCard style={styles.card}>
             <View style={styles.content}>
-                <Subtitle>Restore from backup?</Subtitle>
+                <Subtitle>Restart discovery?</Subtitle>
                 <Spacer size={theme.spacing.m} />
                 <Body>
-                    This replaces your current progress with {summary.reviewed} reviewed and {summary.marked} to-delete
-                    photos{dupPart} from the backup. Your photos aren’t changed.
+                    This clears the on-device scan cache and re-scans your entire library from
+                    scratch, including photos already analyzed. It can take longer than a normal
+                    rescan. Your photo tags for this review session will be cleared — no photos
+                    are deleted.
                 </Body>
             </View>
             <View style={styles.actions}>
                 <DialogButton title="Cancel" onPress={hideModal} isFirst />
                 <DialogButton
-                    title="Restore"
+                    title="Restart"
                     onPress={onConfirm}
                     variant="destructive"
-                    accessibilityLabel="Confirm restore"
+                    accessibilityLabel="Confirm restart duplicate discovery"
                     isLast
                 />
             </View>

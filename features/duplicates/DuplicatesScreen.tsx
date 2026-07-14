@@ -8,7 +8,8 @@ import * as haptics from '../../platform/haptics';
 import * as MediaAccess from '../../platform/mediaAccess';
 import { useModal } from '../../providers/ModalProvider';
 import { useRestore } from '../../providers/RestoreProvider';
-import { loadScanResults, saveScanResults } from '../../services/duplicates/resultsCache';
+import { clearHashCache } from '../../services/duplicates/hashCache';
+import { clearScanResults, loadScanResults, saveScanResults } from '../../services/duplicates/resultsCache';
 import { runScanWithPersistence } from '../../services/duplicates/runScan';
 import { createScanActivityController } from '../../services/duplicates/scanActivity';
 import { storage } from '../../services/storage';
@@ -24,10 +25,11 @@ import { GlassButton } from '../../ui/glass/GlassButton';
 import { GlassCard } from '../../ui/glass/GlassCard';
 import { DialogButton } from '../../ui/primitives/DialogButton';
 import { Spacer } from '../../ui/primitives/Layout';
-import { Body, Title } from '../../ui/primitives/Typography';
+import { Body, Subtitle, Title } from '../../ui/primitives/Typography';
 import { theme } from '../../ui/theme';
 import { GroupDetailViewer } from './GroupDetailViewer';
 import { GroupsReviewScreen } from './GroupsReviewScreen';
+import { ResetDiscoveryConfirmationModal } from './ResetDiscoveryConfirmationModal';
 
 type Stage = 'loading' | 'idle' | 'scanning' | 'reviewing' | 'error';
 
@@ -442,9 +444,9 @@ export const DuplicatesScreen: React.FC = () => {
         showModal(
             <GlassCard style={styles.confirmCard}>
                 <View style={styles.confirmContent}>
-                    <Title>
+                    <Subtitle>
                         Delete {deleteCount} {deleteCount === 1 ? 'photo' : 'photos'}?
-                    </Title>
+                    </Subtitle>
                     <Spacer size={theme.spacing.m} />
                     <Body>
                         The selected photos will be removed from your library. On iOS they go to
@@ -465,6 +467,31 @@ export const DuplicatesScreen: React.FC = () => {
             { type: 'dialog' },
         );
     }, [deleteCount, showModal, hideModal, handleConfirmDelete]);
+
+    const handleConfirmResetDiscovery = useCallback(async () => {
+        hideModal();
+        // Stop any in-flight scan first so its throttled saves can't recreate the
+        // files we're about to delete (same idiom as the restore effect above).
+        cancelRef.current.cancelled = true;
+        void activityControllerRef.current.end(
+            progressRef.current ?? { phase: 'grouping', processed: 0, total: 0 },
+            groupsRef.current.length,
+        );
+        setGroups([]);
+        setMetaById(new Map());
+        setDecisions(new Map());
+        setDiagnostics(null);
+        setProgress(null);
+        await Promise.all([clearScanResults(), clearHashCache()]);
+        // scanRun becomes nonzero, so the effect skips the scanRun===0 disk-load
+        // branch entirely; forceResumeRef/backgroundInterruptedRef are both still
+        // false, so this lands on a genuinely fresh scan (decisions wiped, no resume).
+        setScanRun((n) => n + 1);
+    }, [hideModal]);
+
+    const handleRequestResetDiscovery = useCallback(() => {
+        showModal(<ResetDiscoveryConfirmationModal onConfirm={handleConfirmResetDiscovery} />, { type: 'dialog' });
+    }, [showModal, handleConfirmResetDiscovery]);
 
     const isScanning = stage === 'scanning';
 
@@ -507,6 +534,7 @@ export const DuplicatesScreen: React.FC = () => {
                     onDelete={handleRequestDelete}
                     onRescan={startScan}
                     onCancelScan={handleCancelScan}
+                    onResetDiscovery={handleRequestResetDiscovery}
                 />
             )}
 

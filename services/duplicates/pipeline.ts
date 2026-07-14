@@ -50,7 +50,14 @@ export interface ScanOptions {
     cancel?: CancelToken;
     /** Hamming distance threshold for near-duplicates (lower = stricter). */
     nearDupThreshold?: number;
-    /** Enables the iOS-only semantic tier (off by default). */
+    /**
+     * Enables the iOS-only semantic tier. Defaults to off *at this level* —
+     * i.e. omitting it here means `scanForDuplicates` itself won't turn Tier 3
+     * on. In practice every real caller goes through
+     * `runScanWithPersistence` (`runScan.ts`), which defaults this to
+     * `isSemanticAvailable()` — so Tier 3 runs by default on any real iOS
+     * dev/production build (not Expo Go, not Android).
+     */
     enableSemantic?: boolean;
 }
 
@@ -114,7 +121,11 @@ export async function scanForDuplicates(options: ScanOptions = {}): Promise<Scan
     const meta = new Map<string, AssetMeta>();
     const hashes = new Map<string, AssetHash>();
     const uf = new UnionFind();
-    const hashLinked = new Set<string>();
+    // Collects semantic-tier edges (Tier 3) so `assembleGroups` can re-apply
+    // them post-hoc when re-partitioning hash-tier components into cliques —
+    // see grouping.ts's `mergeClustersByEdges`. Populated in place; empty
+    // until (and unless) the semantic block below runs.
+    const semanticEdges: [string, string][] = [];
     const clusterState = createClusterState();
     const diag = emptyDiagnostics(0);
     const decodeErrorSamples: string[] = [];
@@ -128,7 +139,7 @@ export async function scanForDuplicates(options: ScanOptions = {}): Promise<Scan
         if (!onGroups) return;
         const now = Date.now();
         if (!force && (!dirty || sinceEmit < EMIT_MIN_NEW || now - lastEmitAt < EMIT_INTERVAL_MS)) return;
-        const groups = assembleGroups(uf, meta, hashes, hashLinked);
+        const groups = assembleGroups(uf, meta, hashes, nearDupThreshold, semanticEdges);
         onGroups({ groups, metaById: meta, diagnostics: { ...diag } });
         dirty = false;
         sinceEmit = 0;
@@ -154,7 +165,7 @@ export async function scanForDuplicates(options: ScanOptions = {}): Promise<Scan
             if (cached && cached.modificationTime === asset.modificationTime) {
                 hashes.set(asset.id, cached);
                 diag.cacheHits++;
-                if (addHashToClusters(cached, nearDupThreshold, uf, clusterState, hashLinked)) dirty = true;
+                if (addHashToClusters(cached, nearDupThreshold, uf, clusterState)) dirty = true;
             } else {
                 // Time resolve+hash: a single corrupt/huge asset can wedge a native
                 // call, and since hashing is sequential that stalls the whole scan.
@@ -179,7 +190,7 @@ export async function scanForDuplicates(options: ScanOptions = {}): Promise<Scan
                         diag.hashed++;
                         hashedSinceFlush++;
                         if (isFallback) diag.phFallbackRecovered++;
-                        if (addHashToClusters(entry, nearDupThreshold, uf, clusterState, hashLinked)) dirty = true;
+                        if (addHashToClusters(entry, nearDupThreshold, uf, clusterState)) dirty = true;
                     } catch (e) {
                         diag.decodeFailed++;
                         if (decodeErrorSamples.length < 5) {
@@ -267,6 +278,7 @@ export async function scanForDuplicates(options: ScanOptions = {}): Promise<Scan
             {
                 cancel,
                 onProgress: (p, total) => onProgress?.({ phase: 'semantic', processed: p, total }),
+                edges: semanticEdges,
             },
         );
         dirty = true; // semantic edges can merge components even without a new hash edge
@@ -279,7 +291,7 @@ export async function scanForDuplicates(options: ScanOptions = {}): Promise<Scan
 
     // --- Assemble groups ---------------------------------------------------------
     onProgress?.({ phase: 'grouping', processed: meta.size, total: meta.size });
-    const groups = assembleGroups(uf, meta, hashes, hashLinked);
+    const groups = assembleGroups(uf, meta, hashes, nearDupThreshold, semanticEdges);
     diag.durationMs = Date.now() - startedAt;
     console.log('[duplicates] scan summary', diag);
     onGroups?.({ groups, metaById: meta, diagnostics: { ...diag } });

@@ -1,6 +1,7 @@
 /**
  * Grouping layer: Union-Find over asset ids fed by near-duplicate (hash) and
- * semantic edges, plus the "which one to keep" heuristic. All pure — no RN.
+ * semantic edges, a clique-cover pass that breaks the chaining raw Union-Find
+ * components are prone to, plus the "which one to keep" heuristic. All pure — no RN.
  */
 import { hammingDistance } from './hashCore';
 import type { AssetHash, AssetMeta, DuplicateGroup, GroupReason, Hash } from './types';
@@ -87,17 +88,17 @@ export function createClusterState(): ClusterState {
  * its eventual final size (identical for any band that never grows past the
  * cap, and bounded for pathological ones).
  *
+ * Note: this still unions on any single pairwise match, so the resulting
+ * Union-Find components can chain unrelated assets together (A~B~C~D even
+ * when A and D share nothing). That's intentional here — this stays cheap and
+ * incremental for streaming; `assembleGroups` is what re-partitions each
+ * component into cohesive cliques before it becomes a `DuplicateGroup`.
+ *
  * Returns true iff this hash merged two previously-separate components — i.e.
  * the visible group set actually changed, which callers can use to decide
  * whether a UI refresh is worth doing.
  */
-export function addHashToClusters(
-    ah: AssetHash,
-    threshold: number,
-    uf: UnionFind,
-    state: ClusterState,
-    hashLinked: Set<string>,
-): boolean {
+export function addHashToClusters(ah: AssetHash, threshold: number, uf: UnionFind, state: ClusterState): boolean {
     state.byId.set(ah.id, ah);
     uf.find(ah.id); // ensure every asset is a node even if it stays a singleton
 
@@ -119,8 +120,6 @@ export function addHashToClusters(
         if (hammingDistance(ah.dhash, state.byId.get(other)!.dhash) <= threshold) {
             if (uf.find(ah.id) !== uf.find(other)) merged = true;
             uf.union(ah.id, other);
-            hashLinked.add(ah.id);
-            hashLinked.add(other);
         }
     }
     return merged;
@@ -128,21 +127,106 @@ export function addHashToClusters(
 
 /**
  * Unions near-duplicate assets whose hashes are within `threshold` bits, using
- * band bucketing to keep comparisons near-linear. Records which ids were linked
- * by a hash edge so the group reason can distinguish near-dups from similars.
- * Defined in terms of `addHashToClusters` so batch and streaming stay equivalent
- * by construction.
+ * band bucketing to keep comparisons near-linear. Defined in terms of
+ * `addHashToClusters` so batch and streaming stay equivalent by construction.
  */
-export function clusterByHash(
-    hashes: AssetHash[],
-    threshold: number,
-    uf: UnionFind,
-    hashLinked: Set<string>,
-): void {
+export function clusterByHash(hashes: AssetHash[], threshold: number, uf: UnionFind): void {
     const state = createClusterState();
     for (const ah of hashes) {
-        addHashToClusters(ah, threshold, uf, state, hashLinked);
+        addHashToClusters(ah, threshold, uf, state);
     }
+}
+
+/**
+ * Partitions `items` so every pair WITHIN a returned cluster satisfies
+ * `linkable` (a clique) — never merges items transitively through a third,
+ * unlike a raw Union-Find connected component. Greedy clique cover: seeds each
+ * cluster from the unassigned item with the most remaining candidate links
+ * (deterministic tiebreak on `key`, since Set/array iteration below is in
+ * ascending sorted-key order), then only admits a candidate if it's linkable
+ * to EVERY member already in the cluster (complete linkage) — so a candidate
+ * that's only linkable to *some* of the cluster starts a new one instead.
+ *
+ * Deterministic given a stable `key`: the same input always yields the same
+ * partition regardless of insertion order, so re-running this on a streaming
+ * snapshot doesn't reshuffle group ids and thrash the list UI.
+ *
+ * O(n^2) to build the adjacency matrix, O(n^2..n^3) for the greedy cover — fine
+ * since `items` is a single Union-Find component (tens of assets in practice,
+ * not the whole library); callers should cap `items.length` for pathological
+ * inputs rather than rely on this function to bound its own cost.
+ */
+export function completeLinkageClusters<T>(items: T[], key: (item: T) => string, linkable: (a: T, b: T) => boolean): T[][] {
+    if (items.length === 0) return [];
+    const sorted = [...items].sort((a, b) => {
+        const ka = key(a);
+        const kb = key(b);
+        return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+    const n = sorted.length;
+
+    const adjacency: boolean[][] = Array.from({ length: n }, () => new Array<boolean>(n).fill(false));
+    for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+            if (linkable(sorted[i], sorted[j])) {
+                adjacency[i][j] = true;
+                adjacency[j][i] = true;
+            }
+        }
+    }
+
+    const unassigned = new Set<number>(Array.from({ length: n }, (_, i) => i));
+    const clusters: T[][] = [];
+
+    while (unassigned.size > 0) {
+        // Seed from the unassigned item with the most remaining connections;
+        // Set iteration is ascending-index (== ascending key) order, so the
+        // first item to reach a new max degree is also the lowest-key tiebreak.
+        let seed = -1;
+        let seedDegree = -1;
+        for (const i of unassigned) {
+            let degree = 0;
+            for (const j of unassigned) {
+                if (i !== j && adjacency[i][j]) degree++;
+            }
+            if (degree > seedDegree) {
+                seedDegree = degree;
+                seed = i;
+            }
+        }
+
+        const clusterIndices = [seed];
+        unassigned.delete(seed);
+
+        for (const candidate of [...unassigned].sort((a, b) => a - b)) {
+            if (clusterIndices.every((member) => adjacency[member][candidate])) {
+                clusterIndices.push(candidate);
+                unassigned.delete(candidate);
+            }
+        }
+
+        clusters.push(clusterIndices.map((i) => sorted[i]));
+    }
+
+    return clusters;
+}
+
+/**
+ * Hash-tier wrapper around `completeLinkageClusters`: splits a raw Union-Find
+ * component into hash-cohesive cliques. An id with no retained hash (e.g. a
+ * decode failure) can't be cohesive with anything and becomes its own
+ * singleton, dropped by the size>=2 filter in `assembleGroups`.
+ */
+export function splitComponentByHash(ids: string[], hashes: Map<string, AssetHash>, threshold: number): string[][] {
+    return completeLinkageClusters(
+        ids,
+        (id) => id,
+        (a, b) => {
+            const ha = hashes.get(a)?.dhash;
+            const hb = hashes.get(b)?.dhash;
+            return ha != null && hb != null && hammingDistance(ha, hb) <= threshold;
+        },
+    );
 }
 
 /** True when the asset looks like a screenshot (iOS media subtype or filename). */
@@ -188,31 +272,101 @@ function compareKeeper(
     return ma.modificationTime - mb.modificationTime; // prefer most recently modified
 }
 
+/** Components larger than this skip cohesion splitting below and are dropped
+ *  entirely rather than emitted as one unreviewable mega-group. Pathological
+ *  giant components (e.g. thousands of near-solid-color images colliding in
+ *  one LSH bucket) are already a known edge case `MAX_BUCKET` guards against;
+ *  this just bounds the split's O(n^2..n^3) cost, not correctness. */
+const MAX_SPLIT_COMPONENT = 400;
+
+/** True iff at least one pair within `ids` is within `threshold` hash bits —
+ *  the real per-group evidence for the 'near-dup' reason. Replaces the old
+ *  global `hashLinked` set, which mislabeled a whole heterogeneous component
+ *  as 'near-dup' the moment ANY single member anywhere in it had a hash edge. */
+function hasHashPairWithin(ids: string[], hashes: Map<string, AssetHash>, threshold: number): boolean {
+    for (let i = 0; i < ids.length; i++) {
+        const ha = hashes.get(ids[i])?.dhash;
+        if (!ha) continue;
+        for (let j = i + 1; j < ids.length; j++) {
+            const hb = hashes.get(ids[j])?.dhash;
+            if (hb && hammingDistance(ha, hb) <= threshold) return true;
+        }
+    }
+    return false;
+}
+
 /**
- * Assembles final groups from the Union-Find state: drops singletons, picks a
- * keeper per group, labels the reason, and sorts by how many assets are
- * removable (largest cleanup opportunities first).
+ * Re-bridges hash-cohesive clusters using semantic edges. Semantic edges are
+ * cohesive by construction (see `addSemanticEdges`'s own clique-cover pass),
+ * so it's safe for them to re-connect hash cliques of the same subject
+ * without reintroducing the chaining this whole module exists to avoid.
+ */
+function mergeClustersByEdges(clusters: string[][], edges: ReadonlyArray<readonly [string, string]>): string[][] {
+    if (edges.length === 0) return clusters;
+
+    const clusterOf = new Map<string, number>();
+    clusters.forEach((cluster, index) => {
+        for (const id of cluster) clusterOf.set(id, index);
+    });
+
+    const merge = new UnionFind();
+    clusters.forEach((_, index) => merge.find(String(index)));
+    for (const [a, b] of edges) {
+        const ia = clusterOf.get(a);
+        const ib = clusterOf.get(b);
+        if (ia === undefined || ib === undefined) continue; // edge references an id outside this component
+        merge.union(String(ia), String(ib));
+    }
+
+    const merged = new Map<string, string[]>();
+    clusters.forEach((cluster, index) => {
+        const root = merge.find(String(index));
+        const arr = merged.get(root);
+        if (arr) arr.push(...cluster);
+        else merged.set(root, [...cluster]);
+    });
+    return [...merged.values()];
+}
+
+/**
+ * Assembles final groups from the Union-Find state. Raw Union-Find components
+ * are connected components, not cliques — a single hash or semantic edge can
+ * transitively chain unrelated photos together (A~B~C~D even when A and D
+ * share nothing pairwise). This re-partitions each component into
+ * hash-cohesive cliques (`splitComponentByHash`), re-bridges them using
+ * semantic edges, then — per final cluster — drops singletons, picks a
+ * keeper, labels the reason from real per-cluster evidence, and sorts by how
+ * many assets are removable (largest cleanup opportunities first).
  */
 export function assembleGroups(
     uf: UnionFind,
     meta: Map<string, AssetMeta>,
     hashes: Map<string, AssetHash>,
-    hashLinked: Set<string>,
+    threshold: number,
+    semanticEdges: ReadonlyArray<readonly [string, string]> = [],
 ): DuplicateGroup[] {
     const groups: DuplicateGroup[] = [];
     for (const [, ids] of uf.components()) {
         if (ids.length < 2) continue;
-        const reason: GroupReason = ids.some((id) => hashLinked.has(id)) ? 'near-dup' : 'similar';
-        // Use the smallest asset id (not the UF root) as the stable group id: the
-        // root can flip whenever two components merge, which would otherwise
-        // re-key this group on every streaming update and thrash the list UI.
-        const id = ids.reduce((min, x) => (x < min ? x : min));
-        groups.push({
-            id,
-            assetIds: ids,
-            reason,
-            keeperId: pickKeeper(ids, meta, hashes),
-        });
+        if (ids.length > MAX_SPLIT_COMPONENT) continue; // untrustworthy pathological component — drop, not emit
+
+        const hashClusters = splitComponentByHash(ids, hashes, threshold);
+        const clusters = mergeClustersByEdges(hashClusters, semanticEdges);
+
+        for (const cluster of clusters) {
+            if (cluster.length < 2) continue;
+            const reason: GroupReason = hasHashPairWithin(cluster, hashes, threshold) ? 'near-dup' : 'similar';
+            // Use the smallest asset id (not the UF root) as the stable group id: the
+            // root can flip whenever two components merge, which would otherwise
+            // re-key this group on every streaming update and thrash the list UI.
+            const id = cluster.reduce((min, x) => (x < min ? x : min));
+            groups.push({
+                id,
+                assetIds: cluster,
+                reason,
+                keeperId: pickKeeper(cluster, meta, hashes),
+            });
+        }
     }
     groups.sort((a, b) => b.assetIds.length - a.assetIds.length);
     return groups;

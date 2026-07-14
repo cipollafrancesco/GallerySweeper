@@ -9,7 +9,8 @@
     "ios:device": "expo run:ios --device",
     "web": "expo start --web",
     "prebuild": "expo prebuild --clean",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "node --import ./scripts/registerTsExtensionResolver.mjs --test services/duplicates/*.test.ts"
   },
   "dependencies": {
     "@bacons/apple-targets": "^3.0.7",

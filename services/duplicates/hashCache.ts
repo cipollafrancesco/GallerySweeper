@@ -35,3 +35,13 @@ export async function saveHashCache(cache: Map<string, AssetHash>): Promise<void
         console.warn('Failed to persist perceptual-hash cache', e);
     }
 }
+
+/** Clears the perceptual-hash cache (e.g. to force a full re-hash). Best-effort. */
+export async function clearHashCache(): Promise<void> {
+    try {
+        const file = cacheFile();
+        if (file.exists) file.delete();
+    } catch (e) {
+        console.warn('Failed to clear perceptual-hash cache', e);
+    }
+}

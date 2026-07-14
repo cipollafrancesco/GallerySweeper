@@ -5,6 +5,10 @@ import { clearScanResults } from '../services/duplicates/resultsCache';
 import { storage } from '../services/storage';
 
 const BUFFER_SIZE = 10;
+// Cap on how many pages the "surface new photos first" pass will scan looking
+// for the start of the already-reviewed block, so a reload never turns into an
+// unbounded scan (e.g. if review state was cleared out-of-band).
+const NEW_SCAN_PAGE_CAP = 5;
 
 // Helper function to deduplicate assets by ID
 const deduplicateAssets = (existingAssets: MediaAccess.Asset[], newAssets: MediaAccess.Asset[]): MediaAccess.Asset[] => {
@@ -317,66 +321,136 @@ export const useQueue = () => {
                 // Also get current queue IDs to prevent duplicates
                 const currentQueueIds = new Set(state.queue.map(asset => asset.id));
 
-                let finalAssets: MediaLibrary.Asset[] = [];
-                let nextPage: string | undefined = lastSeenAssetId || undefined;
-                let hasNext = true;
-                let iterationCount = 0;
+                // Pages the media library from `after`, dropping already reviewed/marked/queued
+                // assets, until it collects `need` fresh ones, the library is exhausted, or
+                // (stopWhenSeen) a previously-seen asset is encountered.
+                const collectFresh = async ({
+                    after,
+                    need,
+                    stopWhenSeen = false,
+                    maxPages,
+                }: {
+                    after?: string;
+                    need: number;
+                    stopWhenSeen?: boolean;
+                    maxPages?: number;
+                }): Promise<{ assets: MediaLibrary.Asset[]; endCursor?: string; hasNextPage: boolean }> => {
+                    let assets: MediaLibrary.Asset[] = [];
+                    let nextPage: string | undefined = after;
+                    let hasNext = true;
+                    let iterationCount = 0;
 
-                // Fetch fresh assets from media library
-                while (finalAssets.length < BUFFER_SIZE && hasNext) {
-                    iterationCount++;
+                    while (assets.length < need && hasNext) {
+                        iterationCount++;
 
-                    let result: MediaAccess.AssetListResponse;
-                    try {
-                        result = await MediaAccess.list({ after: nextPage });
-                    } catch (error: any) {
-                        if (error.message?.includes('Couldn\'t find cursor') && nextPage) {
-                            // The cursor is invalid (photo probably deleted), start from beginning
-                            nextPage = undefined;
-                            result = await MediaAccess.list({ after: undefined });
-                        } else {
-                            throw error; // Re-throw other errors
+                        let result: MediaAccess.AssetListResponse;
+                        try {
+                            result = await MediaAccess.list({ after: nextPage });
+                        } catch (error: any) {
+                            if (error.message?.includes('Couldn\'t find cursor') && nextPage) {
+                                // The cursor is invalid (photo probably deleted), start from beginning
+                                nextPage = undefined;
+                                result = await MediaAccess.list({ after: undefined });
+                            } else {
+                                throw error; // Re-throw other errors
+                            }
+                        }
+
+                        // Filter out already reviewed, marked, or queued assets
+                        const freshAssets = result.assets.filter(
+                            (asset) => !reviewedIds.has(asset.id) &&
+                                !markedForDeleteIds.has(asset.id) &&
+                                !currentQueueIds.has(asset.id)
+                        );
+                        const sawSeen = freshAssets.length < result.assets.length;
+
+                        assets = [...assets, ...freshAssets];
+                        nextPage = result.endCursor;
+                        hasNext = result.hasNextPage;
+
+                        if (stopWhenSeen) {
+                            // The moment a page contains a previously-seen asset, the contiguous
+                            // "newly added" block at the top of the roll has ended - stop here
+                            // rather than paging further into the already-reviewed backlog.
+                            if (sawSeen) break;
+                            if (result.assets.length === 0) { hasNext = false; break; }
+                            if (maxPages && iterationCount >= maxPages) break;
+                            continue;
+                        }
+
+                        // If we got assets from the library but none passed the filter,
+                        // and we haven't reached the end of the library, continue fetching
+                        if (freshAssets.length === 0 && result.assets.length > 0 && hasNext) {
+                            continue;
+                        }
+
+                        // If we got no assets from the library at all, we've reached the end
+                        if (result.assets.length === 0) {
+                            hasNext = false;
+                            break;
+                        }
+
+                        // If we got some unreviewed assets, we can stop here
+                        if (freshAssets.length > 0) {
+                            break;
+                        }
+
+                        // Prevent infinite loops
+                        if (iterationCount > 100) {
+                            hasNext = false;
+                            break;
                         }
                     }
 
-                    // Filter out already reviewed, marked, or queued assets
-                    const freshAssets = result.assets.filter(
-                        (asset) => !reviewedIds.has(asset.id) &&
-                            !markedForDeleteIds.has(asset.id) &&
-                            !currentQueueIds.has(asset.id)
-                    );
+                    return { assets, endCursor: nextPage, hasNextPage: hasNext };
+                };
 
-                    finalAssets = [...finalAssets, ...freshAssets];
-                    nextPage = result.endCursor;
-                    hasNext = result.hasNextPage;
+                let finalAssets: MediaLibrary.Asset[];
+                let finalEndCursor: string | undefined;
+                let finalHasNextPage: boolean;
 
-                    // If we got assets from the library but none passed the filter,
-                    // and we haven't reached the end of the library, continue fetching
-                    if (freshAssets.length === 0 && result.assets.length > 0 && hasNext) {
-                        continue;
-                    }
+                if (!lastSeenAssetId) {
+                    // Fresh start (explicit reset, or no cursor yet): a single top-down pass.
+                    const page = await collectFresh({ after: undefined, need: BUFFER_SIZE });
+                    finalAssets = page.assets;
+                    finalEndCursor = page.endCursor;
+                    finalHasNextPage = page.hasNextPage;
+                } else {
+                    // Resume: first grab any newly-added photos sitting above the last-seen
+                    // cursor (a short pass that stops as soon as it reaches the reviewed
+                    // block), then fall back to the existing backlog cursor to fill the rest.
+                    // This keeps new captures visible immediately without losing the
+                    // lastSeenAssetId fast-forward for large reviewed histories.
+                    const fresh = await collectFresh({
+                        after: undefined,
+                        need: BUFFER_SIZE,
+                        stopWhenSeen: true,
+                        maxPages: NEW_SCAN_PAGE_CAP,
+                    });
 
-                    // If we got no assets from the library at all, we've reached the end
-                    if (result.assets.length === 0) {
-                        hasNext = false;
-                        break;
-                    }
-
-                    // If we got some unreviewed assets, we can stop here
-                    if (freshAssets.length > 0) {
-                        break;
-                    }
-
-                    // Prevent infinite loops
-                    if (iterationCount > 100) {
-                        hasNext = false;
-                        break;
+                    if (fresh.assets.length >= BUFFER_SIZE) {
+                        finalAssets = fresh.assets;
+                        finalEndCursor = lastSeenAssetId; // backlog untouched - still resumes from here next time
+                        finalHasNextPage = true;
+                    } else {
+                        const freshIds = new Set(fresh.assets.map((asset) => asset.id));
+                        const backlog = await collectFresh({
+                            after: lastSeenAssetId,
+                            need: BUFFER_SIZE - fresh.assets.length,
+                        });
+                        const dedupedBacklog = backlog.assets.filter((asset) => !freshIds.has(asset.id));
+                        finalAssets = [...fresh.assets, ...dedupedBacklog];
+                        finalEndCursor = backlog.endCursor;
+                        // Phase 1's hasNextPage reflects the library below wherever it stopped
+                        // scanning (typically the already-reviewed region) - not whether the
+                        // backlog itself has more, so only the backlog pass's value is authoritative.
+                        finalHasNextPage = backlog.hasNextPage;
                     }
                 }
 
                 dispatch({
                     type: QueueActionType.LOAD_MORE,
-                    payload: { assets: finalAssets, endCursor: nextPage, hasNextPage: hasNext },
+                    payload: { assets: finalAssets, endCursor: finalEndCursor, hasNextPage: finalHasNextPage },
                 });
             } catch (error) {
                 // Ensure we always dispatch something to reset loading state

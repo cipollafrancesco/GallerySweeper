@@ -9,6 +9,7 @@ import { EmptyDeck } from './features/deck/EmptyDeck';
 import { SwipeDeck, SwipeDeckRef } from './features/deck/SwipeDeck';
 import { DuplicatesScreen } from './features/duplicates/DuplicatesScreen';
 import { Hud } from './features/hud/Hud';
+import { SweepHeader } from './features/hud/SweepHeader';
 import { BottomTabBar, TabKey } from './features/navigation/BottomTabBar';
 import { OverlayManager } from './features/onboarding/OverlayManager';
 import { Prefetcher } from './features/prefetch/Prefetcher';
@@ -67,12 +68,15 @@ const AppContent: React.FC = () => {
 
       <View style={styles.content}>
         <View style={[styles.tabView, tab !== 'review' && styles.hidden]} pointerEvents={tab === 'review' ? 'auto' : 'none'}>
-          {showDeck && topAsset && (
-            <SwipeDeck ref={deckRef} asset={topAsset} onLeft={markTopForDeletion} onRight={keepTop} />
-          )}
-          {showDeck && showEmptyDeck && <EmptyDeck onRefresh={() => reload(true)} />}
+          {showDeck && <SweepHeader />}
+          <View style={styles.deckRegion}>
+            {showDeck && topAsset && (
+              <SwipeDeck ref={deckRef} asset={topAsset} onLeft={markTopForDeletion} onRight={keepTop} />
+            )}
+            {showDeck && showEmptyDeck && <EmptyDeck onRefresh={() => reload(true)} />}
+            {showDeck && <Prefetcher uris={prefetchUris} />}
+          </View>
           {showDeck && <Hud deckRef={deckRef} />}
-          {showDeck && <Prefetcher uris={prefetchUris} />}
         </View>
 
         {duplicatesMounted && (
@@ -113,6 +117,9 @@ const styles = StyleSheet.create({
   },
   tabView: {
     ...StyleSheet.absoluteFillObject,
+  },
+  deckRegion: {
+    flex: 1,
   },
   hidden: {
     display: 'none',

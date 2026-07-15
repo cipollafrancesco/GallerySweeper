@@ -1,5 +1,5 @@
 import { X } from 'lucide-react-native';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useQueue } from '../../domain/queueManager';
 import { useModal } from '../../providers/ModalProvider';
@@ -13,10 +13,13 @@ import {
     summarizeBackup,
     type BackupEnvelopeV1,
 } from '../../services/backup';
+import { storage } from '../../services/storage';
 import { GlassCard } from '../../ui/glass/GlassCard';
 import { Spacer } from '../../ui/primitives/Layout';
-import { Body, Caption, Title } from '../../ui/primitives/Typography';
+import { HeaderIconButton } from '../../ui/primitives/HeaderIconButton';
+import { Body, Caption, Subtitle, Title } from '../../ui/primitives/Typography';
 import { theme } from '../../ui/theme';
+import { formatBytes, formatCount } from '../../utils/format';
 import appConfig from '../../app.json';
 import { BackupConfirmationModal } from './BackupConfirmationModal';
 import { ResetConfirmationModal } from './ResetConfirmationModal';
@@ -26,6 +29,18 @@ export const SettingsModal = () => {
     const { resetReviewState, loading } = useQueue();
     const { requestRestore } = useRestore();
     const appVersion = appConfig.expo.version;
+
+    const [lifetimeStats, setLifetimeStats] = useState({ count: 0, bytes: 0 });
+    useEffect(() => {
+        storage.getLifetimeStats().then(setLifetimeStats);
+    }, []);
+
+    // Lead with a "~" whenever there's a real figure to hedge — the underlying byte
+    // count is an accumulated estimate (see MediaAccess.measureAssetsSize), not an
+    // exact measurement, so stating it as precise would overclaim. Skip the tilde
+    // on a genuine zero so a fresh install reads "0 B", not "~0 B".
+    const spaceFreed =
+        lifetimeStats.bytes > 0 ? `~${formatBytes(lifetimeStats.bytes)}` : formatBytes(lifetimeStats.bytes);
 
     const onReset = () => {
         // Optimistic strategy: only show confirmation modal when not loading
@@ -77,11 +92,27 @@ export const SettingsModal = () => {
     return (
         <GlassCard style={styles.card}>
             <View style={styles.header}>
-                <Title>Settings</Title>
-                <Pressable onPress={hideModal} style={styles.closeButton}>
-                    <X color={theme.colors.icon} size={24} />
-                </Pressable>
+                <Subtitle>Settings</Subtitle>
+                <HeaderIconButton
+                    onPress={hideModal}
+                    accessibilityLabel="Close"
+                    accessibilityHint="Closes settings"
+                    icon={<X color={theme.colors.icon} size={22} />}
+                />
             </View>
+            <Spacer size={theme.spacing.xl} />
+            <View style={styles.statsRow}>
+                <View style={styles.statColumn}>
+                    <Title style={styles.statValue}>{formatCount(lifetimeStats.count)}</Title>
+                    <Caption style={styles.statLabel}>photos deleted</Caption>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statColumn}>
+                    <Title style={styles.statValue}>{spaceFreed}</Title>
+                    <Caption style={styles.statLabel}>space freed</Caption>
+                </View>
+            </View>
+
             <Spacer size={theme.spacing.xl} />
             <Pressable
                 onPress={onReset}
@@ -134,9 +165,29 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    closeButton: {
-        padding: theme.spacing.s,
-        margin: -theme.spacing.s, // Enlarge hit area
+    statsRow: {
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        justifyContent: 'space-around',
+    },
+    statColumn: {
+        alignItems: 'center',
+    },
+    // Groups the two stats into one visual block instead of two floating numbers.
+    statDivider: {
+        width: StyleSheet.hairlineWidth,
+        backgroundColor: theme.colors.separator,
+        marginVertical: theme.spacing.xs,
+    },
+    statValue: {
+        fontSize: 28,
+        // Prevents the digits from reflowing width once the async stats load in
+        // (initial render is "0" / "0 B" before storage.getLifetimeStats resolves).
+        fontVariant: ['tabular-nums'],
+    },
+    statLabel: {
+        color: theme.colors.secondary,
+        marginTop: theme.spacing.xs,
     },
     resetButton: {
         padding: theme.spacing.m,

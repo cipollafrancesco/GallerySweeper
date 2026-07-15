@@ -157,6 +157,16 @@ export const typography = {
         fontFamily: 'SF Pro Text',
         lineHeight: 13,
     },
+    // Compact nav-bar-scale title (title3's size + headline's weight) — the
+    // shared scale for both tab screens' top-bar titles, so it can't drift
+    // apart the way Sweep's and Duplicates' titles did before this token existed.
+    navTitle: {
+        fontSize: 20,
+        fontWeight: '600' as const,
+        color: colors.label,
+        fontFamily: 'SF Pro Text',
+        lineHeight: 25,
+    },
     // Legacy aliases for backward compatibility
     h1: {
         fontSize: 34,

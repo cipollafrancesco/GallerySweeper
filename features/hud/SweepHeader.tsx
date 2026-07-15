@@ -1,12 +1,14 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueue } from '../../domain/queueManager';
 import * as haptics from '../../platform/haptics';
 import { useModal } from '../../providers/ModalProvider';
+import { storage } from '../../services/storage';
 import { PillChip } from '../../ui/glass/PillChip';
+import { ScreenHeader } from '../../ui/primitives/ScreenHeader';
 import { theme } from '../../ui/theme';
+import { formatCount } from '../../utils/format';
 import { SettingsButton } from '../settings/SettingsButton';
 import { SettingsModal } from '../settings/SettingsModal';
 
@@ -26,12 +28,22 @@ const TOOLBAR_ANIMATION_MS = 220;
  * `actionHistory`), rather than fading buttons into a zero-height box.
  */
 export const SweepHeader: React.FC = () => {
-    const insets = useSafeAreaInsets();
-    const { markedForDelete, actionHistory, commitDeletions, clearAllPending, access, loading } = useQueue();
+    const { kept, deleted, markedForDelete, actionHistory, commitDeletions, clearAllPending, access, loading } = useQueue();
     const { showModal } = useModal();
 
     const pendingCount = markedForDelete.size;
     const hasAnyAction = pendingCount > 0 || actionHistory.length > 0;
+
+    // Durable "reviewed" progress — reads the persisted storage caches (which
+    // survive RELOAD, unlike `kept`/`deleted`/`actionHistory` themselves, since
+    // those reset on every library change including our own commit-delete).
+    // `kept`/`deleted`/`markedForDelete`/`actionHistory.length`/`loading` are
+    // only used here as change-triggers: every keep/delete/undo/commit/reload
+    // flips one of them, prompting a fresh read of the durable count.
+    const [reviewedCount, setReviewedCount] = useState(0);
+    useEffect(() => {
+        setReviewedCount(storage.getReviewedIds().size + storage.getMarkedForDeleteIds().size);
+    }, [kept, deleted, markedForDelete, actionHistory.length, loading]);
 
     const toolbarHeight = useSharedValue(0);
     useEffect(() => {
@@ -59,12 +71,24 @@ export const SweepHeader: React.FC = () => {
         commitDeletions();
     };
 
+    // Reviewed-count caption and the Undo All / Delete (N) toolbar are mutually
+    // exclusive — showing both at once wastes vertical space (and, when the
+    // header grows enough, can push the deck card off-fit — see SwipeDeck).
+    const caption = hasAnyAction
+        ? undefined
+        : (access === 'all' || access === 'limited')
+          ? reviewedCount > 0
+              ? `${formatCount(reviewedCount)} reviewed`
+              : 'No photos reviewed yet'
+          : undefined;
+
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <View style={styles.headerRow}>
-                <Text style={styles.navTitle} accessibilityRole="header">Gallery Sweeper</Text>
-                <SettingsButton onPress={onOpenSettings} />
-            </View>
+        <>
+            <ScreenHeader
+                title="Gallery Sweeper"
+                actions={<SettingsButton onPress={onOpenSettings} />}
+                caption={caption}
+            />
 
             <Animated.View style={[styles.toolbar, toolbarStyle]}>
                 <View style={styles.toolbarRow}>
@@ -78,26 +102,13 @@ export const SweepHeader: React.FC = () => {
                     </View>
                 </View>
             </Animated.View>
-        </View>
+        </>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        paddingHorizontal: theme.spacing.l,
-    },
-    headerRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        minHeight: 44,
-    },
-    navTitle: {
-        ...theme.typography.title3,
-        fontWeight: '600',
-        flex: 1,
-    },
     toolbar: {
+        paddingHorizontal: theme.spacing.l,
         overflow: 'hidden',
     },
     toolbarRow: {

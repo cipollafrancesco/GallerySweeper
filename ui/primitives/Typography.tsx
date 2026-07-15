@@ -7,6 +7,8 @@ export const Subtitle: React.FC<TextProps> = (props) => <Text {...props} style={
 export const Body: React.FC<TextProps> = (props) => <Text {...props} style={[styles.body, props.style]} />;
 export const Caption: React.FC<TextProps> = (props) => <Text {...props} style={[styles.caption, props.style]} />;
 export const Label: React.FC<TextProps> = (props) => <Text {...props} style={[styles.label, props.style]} />;
+/** Compact top-bar screen title — shared by Sweep and Duplicates so their nav titles can't drift apart. */
+export const NavTitle: React.FC<TextProps> = (props) => <Text {...props} style={[styles.navTitle, props.style]} />;
 
 
 const styles = StyleSheet.create({
@@ -15,4 +17,5 @@ const styles = StyleSheet.create({
     body: theme.typography.body,
     caption: theme.typography.caption,
     label: theme.typography.label,
+    navTitle: theme.typography.navTitle,
 });

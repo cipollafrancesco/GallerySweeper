@@ -3,6 +3,7 @@ import { Search } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueue } from '../../domain/queueManager';
 import { addExpirationListener, beginTask, endTask } from '../../platform/backgroundExecution';
 import * as haptics from '../../platform/haptics';
 import * as MediaAccess from '../../platform/mediaAccess';
@@ -23,10 +24,10 @@ import type {
 } from '../../services/duplicates/types';
 import { GlassButton } from '../../ui/glass/GlassButton';
 import { GlassCard } from '../../ui/glass/GlassCard';
-import { DialogButton } from '../../ui/primitives/DialogButton';
 import { Spacer } from '../../ui/primitives/Layout';
-import { Body, Subtitle, Title } from '../../ui/primitives/Typography';
+import { Body, Title } from '../../ui/primitives/Typography';
 import { theme } from '../../ui/theme';
+import { SettingsModal } from '../settings/SettingsModal';
 import { GroupDetailViewer } from './GroupDetailViewer';
 import { GroupsReviewScreen } from './GroupsReviewScreen';
 import { ResetDiscoveryConfirmationModal } from './ResetDiscoveryConfirmationModal';
@@ -52,6 +53,9 @@ interface DetailTarget {
 export const DuplicatesScreen: React.FC = () => {
     const { showToast, showModal, hideModal } = useModal();
     const { restoreNonce } = useRestore();
+    // Only needed for the Settings-access gate below, matching SweepHeader's
+    // onOpenSettings exactly — Duplicates doesn't otherwise touch the queue.
+    const { access, loading } = useQueue();
     const insets = useSafeAreaInsets();
 
     const [stage, setStage] = useState<Stage>('loading');
@@ -383,21 +387,37 @@ export const DuplicatesScreen: React.FC = () => {
         }
     }, [groups, metaById, diagnostics, decisions]);
 
+    // "Undo All" equivalent (SweepHeader.tsx's onClearDeletions) — clears every
+    // keep/delete tag across all groups. Unlike Sweep there's no action history
+    // to unwind here; the tags themselves are the state being cleared.
+    const handleClearAll = useCallback(() => {
+        haptics.selection();
+        setDecisions(new Map());
+    }, []);
+
+    // No custom confirmation dialog — same logic as Sweep's onCommitDeletions
+    // (SweepHeader.tsx): fire immediate tap feedback, then delete directly and
+    // rely on iOS's own native "Delete N Photos?" confirmation sheet
+    // (MediaAccess.deleteMany -> deleteAssetsAsync). A prior in-app dialog here
+    // was a redundant second confirmation on top of that OS sheet.
     const handleConfirmDelete = useCallback(async () => {
+        haptics.warning();
         const ids = new Set<string>();
         for (const group of decisions.values()) {
             for (const [assetId, decision] of group) {
                 if (decision === 'delete') ids.add(assetId);
             }
         }
-        hideModal();
         if (ids.size === 0) return;
 
         try {
-            const success = await MediaAccess.deleteMany([...ids]);
+            const idArr = [...ids];
+            const bytes = await MediaAccess.measureAssetsSize(idArr);
+            const success = await MediaAccess.deleteMany(idArr);
             if (success) {
                 // Keep deleted assets out of the main swipe deck.
-                await Promise.all([...ids].map((id) => storage.addReviewedId(id)));
+                await Promise.all(idArr.map((id) => storage.addReviewedId(id)));
+                await storage.addDeletions(idArr.length, bytes);
 
                 const remainingGroups: DuplicateGroup[] = [];
                 for (const group of groups) {
@@ -438,35 +458,7 @@ export const DuplicatesScreen: React.FC = () => {
             haptics.error();
             showToast('Could not delete photos', 'error');
         }
-    }, [decisions, groups, metaById, diagnostics, showToast, hideModal]);
-
-    const handleRequestDelete = useCallback(() => {
-        showModal(
-            <GlassCard style={styles.confirmCard}>
-                <View style={styles.confirmContent}>
-                    <Subtitle>
-                        Delete {deleteCount} {deleteCount === 1 ? 'photo' : 'photos'}?
-                    </Subtitle>
-                    <Spacer size={theme.spacing.m} />
-                    <Body>
-                        The selected photos will be removed from your library. On iOS they go to
-                        Recently Deleted; on Android this cannot be undone.
-                    </Body>
-                </View>
-                <View style={styles.confirmActions}>
-                    <DialogButton title="Cancel" onPress={hideModal} isFirst />
-                    <DialogButton
-                        title="Delete"
-                        variant="destructive"
-                        onPress={handleConfirmDelete}
-                        accessibilityLabel="Confirm delete"
-                        isLast
-                    />
-                </View>
-            </GlassCard>,
-            { type: 'dialog' },
-        );
-    }, [deleteCount, showModal, hideModal, handleConfirmDelete]);
+    }, [decisions, groups, metaById, diagnostics, showToast]);
 
     const handleConfirmResetDiscovery = useCallback(async () => {
         hideModal();
@@ -492,6 +484,14 @@ export const DuplicatesScreen: React.FC = () => {
     const handleRequestResetDiscovery = useCallback(() => {
         showModal(<ResetDiscoveryConfirmationModal onConfirm={handleConfirmResetDiscovery} />, { type: 'dialog' });
     }, [showModal, handleConfirmResetDiscovery]);
+
+    // Same gate as SweepHeader's onOpenSettings — only open once permissions are
+    // resolved and the queue isn't mid-load.
+    const handleOpenSettings = useCallback(() => {
+        if (access === 'all' && !loading) {
+            showModal(<SettingsModal />, { type: 'dialog' });
+        }
+    }, [access, loading, showModal]);
 
     const isScanning = stage === 'scanning';
 
@@ -531,10 +531,12 @@ export const DuplicatesScreen: React.FC = () => {
                     isScanning={isScanning}
                     progress={progress}
                     onOpenGroup={handleOpenGroup}
-                    onDelete={handleRequestDelete}
+                    onDelete={handleConfirmDelete}
+                    onClearAll={handleClearAll}
                     onRescan={startScan}
                     onCancelScan={handleCancelScan}
                     onResetDiscovery={handleRequestResetDiscovery}
+                    onOpenSettings={handleOpenSettings}
                 />
             )}
 
@@ -597,21 +599,5 @@ const styles = StyleSheet.create({
     idleBody: {
         color: theme.colors.secondaryLabel,
         textAlign: 'center',
-    },
-    confirmCard: {
-        maxWidth: 320,
-        padding: 0,
-        paddingTop: theme.spacing.l,
-    },
-    confirmContent: {
-        paddingHorizontal: theme.spacing.l,
-        paddingBottom: theme.spacing.l,
-    },
-    confirmActions: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: theme.colors.separator,
     },
 });

@@ -1,4 +1,5 @@
 import ExpoModulesCore
+import Photos
 import Vision
 
 /**
@@ -35,6 +36,27 @@ public class AppleVisionSimilarityModule: Module {
         throw FeaturePrintDecodeException()
       }
       return floats
+    }
+
+    // Sums real on-disk bytes for the given assets (by PHAsset localIdentifier — which
+    // is exactly the id expo-media-library uses on iOS). PHAssetResource.fileSize is the
+    // only reliable source of a photo's true size on iOS; expo-file-system cannot stat
+    // files inside the Photos library. Sums ALL resources per asset (photo + Live Photo
+    // video + edits) so the total reflects the space actually freed.
+    AsyncFunction("getAssetsSize") { (ids: [String]) -> Double in
+      if ids.isEmpty {
+        return 0
+      }
+      let fetch = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
+      var total: Int64 = 0
+      fetch.enumerateObjects { asset, _, _ in
+        for resource in PHAssetResource.assetResources(for: asset) {
+          if let size = resource.value(forKey: "fileSize") as? NSNumber {
+            total += size.int64Value
+          }
+        }
+      }
+      return Double(total)
     }
   }
 }

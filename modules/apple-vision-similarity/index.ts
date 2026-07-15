@@ -7,6 +7,14 @@ export interface AppleVisionSimilarityModule {
      * Comparison (cosine / L2) is performed in JS.
      */
     featurePrint(uri: string): Promise<number[]>;
+
+    /**
+     * Sums the real on-disk byte size (PHAssetResource.fileSize) of the given assets,
+     * identified by their expo-media-library id (== PHAsset localIdentifier on iOS).
+     * The only reliable source of a photo's true size on iOS — expo-file-system cannot
+     * read files inside the Photos library.
+     */
+    getAssetsSize(ids: string[]): Promise<number>;
 }
 
 /**

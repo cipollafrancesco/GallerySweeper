@@ -1,8 +1,8 @@
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Check, Trash2 } from 'lucide-react-native';
-import React, { useImperativeHandle } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import React, { useImperativeHandle, useState } from 'react';
+import { Dimensions, LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     Extrapolate,
@@ -48,6 +48,17 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
     const translateX = useSharedValue(0);
     const hapticTriggered = useSharedValue(false);
     const isGestureActive = useSharedValue(false);
+
+    // The deck's actual available box — this container fills `deckRegion` in
+    // App.tsx exactly (via absoluteFillObject below), so its measured size is
+    // the real space available between the header and Hud, unlike a fixed
+    // fraction of the full device screen (see cardMaxWidth/cardMaxHeight below).
+    // Defaults match the old hardcoded behavior until the first layout lands.
+    const [containerSize, setContainerSize] = useState({ width: screenWidth, height: screenHeight * 0.6 });
+    const onContainerLayout = (e: LayoutChangeEvent) => {
+        const { width, height } = e.nativeEvent.layout;
+        setContainerSize({ width, height });
+    };
 
     useImperativeHandle(ref, () => ({
         swipeLeft: () => {
@@ -186,10 +197,13 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
         };
     });
 
-    // Calculate image dimensions to maintain aspect ratio
+    // Calculate image dimensions to maintain aspect ratio, capped to the
+    // measured space actually available (see containerSize above) rather than
+    // a fixed fraction of the whole screen — otherwise the card doesn't shrink
+    // when the header/Hud grow, and overflows on top of them.
     const imageAspectRatio = asset.width / asset.height;
-    const cardMaxWidth = screenWidth - theme.spacing.m * 2;
-    const cardMaxHeight = screenHeight * 0.6; // Max 60% of screen height
+    const cardMaxWidth = containerSize.width - theme.spacing.m * 2;
+    const cardMaxHeight = containerSize.height - theme.spacing.m * 2;
 
     let cardWidth = cardMaxWidth;
     let cardHeight = cardWidth / imageAspectRatio;
@@ -201,7 +215,7 @@ export const SwipeDeck = React.forwardRef<SwipeDeckRef, SwipeDeckProps>(({ asset
 
 
     return (
-        <View style={styles.container} pointerEvents="box-none">
+        <View style={styles.container} pointerEvents="box-none" onLayout={onContainerLayout}>
             <GestureDetector gesture={panGesture}>
                 <Animated.View
                     style={[styles.cardContainer, { width: cardWidth, height: cardHeight }, cardStyle]}

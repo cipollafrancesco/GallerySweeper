@@ -595,8 +595,11 @@ export const useQueue = () => {
         if (state.markedForDelete.size === 0) return;
         dispatch({ type: QueueActionType.COMMIT_DELETE_START });
         try {
-            await MediaLibrary.deleteAssetsAsync([...state.markedForDelete]);
-            dispatch({ type: QueueActionType.COMMIT_DELETE_OK, payload: { deletedIds: [...state.markedForDelete] } });
+            const ids = [...state.markedForDelete];
+            const bytes = await MediaAccess.measureAssetsSize(ids);
+            const ok = await MediaLibrary.deleteAssetsAsync(ids);
+            if (ok) await storage.addDeletions(ids.length, bytes);
+            dispatch({ type: QueueActionType.COMMIT_DELETE_OK, payload: { deletedIds: ids } });
         } catch (e) {
             dispatch({ type: QueueActionType.COMMIT_DELETE_ERR, payload: e as Error });
         }

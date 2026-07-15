@@ -34,6 +34,9 @@ export interface BackupEnvelopeV1 {
         markedForDeleteIds: string[];
         lastSeenAssetId: string | null;
         onboardingShown: boolean;
+        /** Optional — absent in backups made before the lifetime-stats feature existed. */
+        lifetimeDeletedCount?: number;
+        lifetimeBytesSaved?: number;
     };
     /**
      * Opaque copy of the persisted duplicate-results payload (or null if no scan
@@ -52,10 +55,11 @@ export interface BackupSummary {
 /** Gathers all current review state into a backup envelope. */
 export async function buildBackup(): Promise<BackupEnvelopeV1> {
     await storage.loadAll();
-    const [lastSeenAssetId, onboardingShown, duplicates] = await Promise.all([
+    const [lastSeenAssetId, onboardingShown, duplicates, lifetimeStats] = await Promise.all([
         storage.getLastSeenAssetId(),
         storage.hasOnboardingBeenShown(),
         exportRawScanResults(),
+        storage.getLifetimeStats(),
     ]);
     return {
         format: BACKUP_FORMAT,
@@ -67,6 +71,8 @@ export async function buildBackup(): Promise<BackupEnvelopeV1> {
             markedForDeleteIds: [...storage.getMarkedForDeleteIds()],
             lastSeenAssetId,
             onboardingShown,
+            lifetimeDeletedCount: lifetimeStats.count,
+            lifetimeBytesSaved: lifetimeStats.bytes,
         },
         duplicates,
     };
@@ -113,5 +119,10 @@ export async function applyBackup(env: BackupEnvelopeV1): Promise<void> {
     }
     // Only ever force the flag on — never re-trigger onboarding on a restore.
     if (env.sweep.onboardingShown) await storage.setOnboardingShown();
+    // Only present in backups made after the lifetime-stats feature shipped — leave
+    // the current tally untouched (don't zero it) when restoring an older backup.
+    if (env.sweep.lifetimeDeletedCount != null) {
+        await storage.setLifetimeStats(env.sweep.lifetimeDeletedCount, env.sweep.lifetimeBytesSaved ?? 0);
+    }
     await importRawScanResults(env.duplicates);
 }

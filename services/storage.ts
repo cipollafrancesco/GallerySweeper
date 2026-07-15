@@ -4,6 +4,8 @@ const REVIEWED_IDS_KEY = 'reviewed_ids';
 const MARKED_FOR_DELETE_IDS_KEY = 'marked_for_delete_ids';
 const LAST_SEEN_ASSET_ID_KEY = 'last_seen_asset_id';
 const ONBOARDING_SHOWN_KEY = 'onboarding_modal_shown';
+const LIFETIME_DELETED_COUNT_KEY = 'lifetime_deleted_count';
+const LIFETIME_BYTES_SAVED_KEY = 'lifetime_bytes_saved';
 
 // Simple in-memory cache to avoid reading from AsyncStorage repeatedly
 let reviewedIdsCache: Set<string> = new Set();
@@ -145,6 +147,45 @@ export const storage = {
             await AsyncStorage.removeItem(ONBOARDING_SHOWN_KEY);
         } catch (e) {
             console.error('Failed to clear onboarding shown', e);
+        }
+    },
+
+    // Lifetime ("all time") impact stats — deliberately NOT cleared by clearReviewState(),
+    // so they survive "Reset reviewed photos". Not cached: read fresh each time (deletions
+    // are serial user actions, so there's no meaningful read-modify-write race in practice).
+    async getLifetimeStats(): Promise<{ count: number; bytes: number }> {
+        try {
+            const [c, b] = await AsyncStorage.multiGet([LIFETIME_DELETED_COUNT_KEY, LIFETIME_BYTES_SAVED_KEY]);
+            return { count: Number(c[1]) || 0, bytes: Number(b[1]) || 0 };
+        } catch (e) {
+            console.error('Failed to read lifetime stats', e);
+            return { count: 0, bytes: 0 };
+        }
+    },
+
+    // Additive; call after a confirmed deletion. `bytes` may be 0 if size was unmeasurable.
+    async addDeletions(count: number, bytes: number) {
+        if (count <= 0) return;
+        try {
+            const cur = await this.getLifetimeStats();
+            await AsyncStorage.multiSet([
+                [LIFETIME_DELETED_COUNT_KEY, String(cur.count + count)],
+                [LIFETIME_BYTES_SAVED_KEY, String(cur.bytes + Math.max(0, bytes))],
+            ]);
+        } catch (e) {
+            console.error('Failed to update lifetime stats', e);
+        }
+    },
+
+    // Overwrite (not additive) — used when restoring a backup.
+    async setLifetimeStats(count: number, bytes: number) {
+        try {
+            await AsyncStorage.multiSet([
+                [LIFETIME_DELETED_COUNT_KEY, String(Math.max(0, count))],
+                [LIFETIME_BYTES_SAVED_KEY, String(Math.max(0, bytes))],
+            ]);
+        } catch (e) {
+            console.error('Failed to set lifetime stats', e);
         }
     },
 };

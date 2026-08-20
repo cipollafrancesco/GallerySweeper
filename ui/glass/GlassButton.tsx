@@ -53,7 +53,7 @@ export const GlassButton: React.FC<GlassButtonProps> = ({
             ]}
             {...props}
         >
-            <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
             <View style={[styles.inner, variantStyles[variant]]}>
                 {children}
                 <TextComponent

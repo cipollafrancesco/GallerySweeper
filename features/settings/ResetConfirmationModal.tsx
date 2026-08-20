@@ -4,7 +4,7 @@ import { useModal } from '../../providers/ModalProvider';
 import { GlassCard } from '../../ui/glass/GlassCard';
 import { DialogButton } from '../../ui/primitives/DialogButton';
 import { Spacer } from '../../ui/primitives/Layout';
-import { Body, Title } from '../../ui/primitives/Typography';
+import { Body, Subtitle } from '../../ui/primitives/Typography';
 import { theme } from '../../ui/theme';
 
 type Props = {
@@ -17,7 +17,7 @@ export const ResetConfirmationModal: React.FC<Props> = ({ onConfirm }) => {
     return (
         <GlassCard style={styles.card}>
             <View style={styles.content}>
-                <Title>Reset reviewed photos?</Title>
+                <Subtitle>Reset reviewed photos?</Subtitle>
                 <Spacer size={theme.spacing.m} />
                 <Body>
                     This clears local references (Kept, To Delete, and progress). Your photos are not deleted. Next time you

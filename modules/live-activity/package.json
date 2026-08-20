@@ -1,0 +1,9 @@
+{
+  "name": "live-activity",
+  "version": "1.0.0",
+  "description": "Bridges ActivityKit to JS to drive GallerySweeper's duplicate-scan progress Live Activity (Lock Screen / Dynamic Island).",
+  "main": "index.ts",
+  "license": "UNLICENSED",
+  "author": "GallerySweeper",
+  "private": true
+}

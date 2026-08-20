@@ -1,29 +1,37 @@
 {
   "expo": {
-    "name": "GallerySweeper",
+    "name": "Gallery Sweeper",
     "slug": "GallerySweeper",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png",
+        "tinted": "./assets/icon-tinted.png"
+      },
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "This app needs access to your photos to help you clean them up.",
-        "PHPhotoLibraryPreventAutomaticLimitedAccessAlert": "false"
+        "PHPhotoLibraryPreventAutomaticLimitedAccessAlert": "false",
+        "NSSupportsLiveActivities": true
       },
-      "bundleIdentifier": "com.francescocipolla.GallerySweeper"
+      "bundleIdentifier": "com.francescocipolla.GallerySweeper",
+      "appleTeamId": "W4FRQQ45TL"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "monochromeImage": "./assets/adaptive-monochrome.png",
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -31,6 +39,18 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-background-task",
+      "@bacons/apple-targets",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.1"
+          }
+        }
+      ]
+    ]
   }
 }
